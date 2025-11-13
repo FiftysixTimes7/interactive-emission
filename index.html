@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Camera, Closest Data, Geolocation, Map, and External Link</title>
+    <!-- PapaParse Library for CSV parsing -->
+    <script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
+
+    <!-- Leaflet CSS and JS Includes -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SVRUfmW7o8SUwESrCSx="
+     crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20n6a9c42z65Z50Qo0v/R7sR5U8i7n0s7f1lM2+fM3E="
+     crossorigin=""></script>
+
+    <style>
+      /* Simple styling for better separation and readability */
+      body { font-family: sans-serif; }
+      pre, select { white-space: pre-wrap; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; background-color: #f7f7f7; }
+      #video { max-width: 100%; height: auto; display: block; margin-bottom: 20px; }
+
+      /* Container for the video and overlay */
+      #video-container { 
+        position: relative; /* Essential for absolute positioning of the overlay */
+        max-width: 100%; 
+        margin-bottom: 20px; 
+      }
+      #video { 
+        max-width: 100%; 
+        height: auto; 
+        display: block; 
+      }
+
+      /* Overlay styling for the grade */
+      #grade-overlay {
+        position: absolute;
+        top: 10px; /* Position from the top */
+        left: 10px; /* Position from the left */
+        color: white; /* High contrast text */
+        background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
+        padding: 5px 10px;
+        font-size: 2em; 
+        font-weight: bold;
+        border-radius: 5px;
+        z-index: 10; /* Ensure it's above the video */
+      }
+
+      h3 { margin-top: 20px; }
+      #map { height: 400px; width: 100%; border: 1px solid #ccc; margin-bottom: 20px;}
+    </style>
+  </head>
+  <body>
+
+    <!-- Video element for the camera stream -->
+    <div id="video-container">
+      <video id="video" autoplay playsinline></video>
+      <div id="grade-overlay"></div>
+    </div>
+
+    <!-- Placeholder for the Geolocation output -->
+    <h3>Geolocation</h3>
+    <pre id="geo-output">Fetching location...</pre>
+
+    <!-- Map Container -->
+    <h3>Map of Closest Entries</h3>
+    <div id="map"></div>
+
+    <!-- Selector for Closest Entries -->
+    <h3>Closest Building Benchmarks (Top <span id="n-closest-count">3</span>)</h3>
+    <select id="closest-entries-select" disabled>
+      <option value="">Locating closest buildings...</option>
+    </select>
+    
+    <!-- Placeholder for the CSV data output (details of the selected entry) -->
+    <pre id="csv-output">Select a building above to see its data.</pre>
+    <!-- NEW: Placeholder for the external link -->
+    <div id="external-link-container"></div>
+
+
+    <script>
+    const video = document.getElementById('video');
+    const csvOutput = document.getElementById('csv-output');
+    const geoOutput = document.getElementById('geo-output');
+    const closestSelect = document.getElementById('closest-entries-select');
+    const nClosestCountSpan = document.getElementById('n-closest-count');
+    const externalLinkContainer = document.getElementById('external-link-container');
+    const gradeOverlay = document.getElementById('grade-overlay'); 
+
+    const csvFilePath = 'building-benchmarks.csv'; 
+    const IPLOCATE_API = 'https://iplocate.io/api/lookup'; 
+    const N_CLOSEST = 3;
+
+    nClosestCountSpan.textContent = N_CLOSEST;
+
+    let allCsvData = [];
+    let map;
+    let markersLayer;
+    const buildingMarkersMap = new Map(); 
+
+    // Define marker styles
+    const USER_MARKER_STYLE = { radius: 8, weight: 1, opacity: 1, fillOpacity: 0.7 };
+    const BUILDING_DEFAULT_STYLE = { radius: 6, weight: 1, opacity: 1, fillOpacity: 0.8, color: '#f59e0b', fillColor: '#f59e0b' };
+    const BUILDING_HIGHLIGHT_STYLE = { radius: 10, weight: 2, opacity: 1, fillOpacity: 1, color: '#ef4444', fillColor: '#ef4444' };
+
+    // --- Camera Initialization ---
+    function initializeCamera() {
+        const cameraConstraints = { video: { facingMode: 'environment' } };
+        
+        // Check for media device support and request camera access
+        navigator.mediaDevices.getUserMedia(cameraConstraints)
+            .then((stream) => {
+                video.srcObject = stream;
+            })
+            .catch((err) => {
+                console.error("Error accessing the camera: " + err);
+            });
+    }
+    initializeCamera();
+
+    // --- Leaflet Map Initialization ---
+    function initializeMap() {
+        map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        markersLayer = L.layerGroup().addTo(map);
+    }
+    initializeMap();
+
+    // --- Map Helper Functions (omitted for brevity, assume they are correct) ---
+
+    function clearMarkers() {
+        markersLayer.clearLayers();
+        buildingMarkersMap.clear();
+    }
+
+    function addLocationMarker(lat, lon, isAccurate) {
+        const style = { ...USER_MARKER_STYLE };
+        style.color = isAccurate ? '#1d4ed8' : '#6b7280';
+        style.fillColor = style.color;
+
+        const marker = L.circleMarker([lat, lon], style).addTo(markersLayer);
+        marker.bindPopup(isAccurate ? "Your GPS Location" : "Your IP (Approximate) Location");
+        return marker;
+    }
+
+    function highlightSelectedMarker(selectedMarkerKey) {
+        buildingMarkersMap.forEach((marker, key) => {
+            marker.setStyle(BUILDING_DEFAULT_STYLE);
+        });
+
+        const selectedMarker = buildingMarkersMap.get(selectedMarkerKey);
+        if (selectedMarker) {
+            selectedMarker.setStyle(BUILDING_HIGHLIGHT_STYLE);
+            selectedMarker.openPopup();
+        }
+    }
+
+    function addBuildingMarker(entry) {
+        const entryLat = parseFloat(entry.Latitude);
+        const entryLon = parseFloat(entry.Longitude);
+        const identifier = entry['Building ID'] || entry['Building Name'] || 'Building';
+        const distanceKm = entry.distance ? entry.distance.toFixed(2) : 'N/A';
+
+        const marker = L.circleMarker([entryLat, entryLon], BUILDING_DEFAULT_STYLE).addTo(markersLayer);
+        marker.bindPopup(`<b>${identifier}</b><br>Distance: ${distanceKm} km`);
+
+        const markerKey = JSON.stringify({ lat: entryLat, lon: entryLon, id: entry['Building ID'] });
+        buildingMarkersMap.set(markerKey, marker);
+
+        marker.on('click', () => {
+            const entryJson = JSON.stringify(entry);
+            closestSelect.value = entryJson;
+            displayEntryDetails(entry);
+            highlightSelectedMarker(markerKey);
+        });
+        
+        return marker;
+    }
+
+    // Haversine formula (omitted for brevity)
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * (Math.PI / 180);
+        const dLon = (lon2 - lon1) * (Math.PI / 180);
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    // --- Utility Function: Slug Generator (New) ---
+    function toSlug(text) {
+        if (!text) return ''; // Handle null or empty input
+        return String(text)
+            .toLowerCase()             // 1. Convert to lowercase
+            .trim()                    // 2. Remove leading/trailing whitespace
+            .replace(/[^a-z0-9\s-]/g, '') // 3. Remove all non-alphanumeric, non-space, non-hyphen chars
+            .replace(/[\s-]+/g, '-');  // 4. Replace any sequence of space/hyphen with a single hyphen
+    }
+
+    // --- Display Logic (The crucial part of this step) ---
+
+    function displayEntryDetails(entry) {
+        let outputText = "";
+
+        // Update the grade overlay text
+        const grade = entry.AvgPercentileLetterGrade || 'N/A';
+        gradeOverlay.textContent = `Grade: ${grade}`; 
+        
+        // Generate the building data text
+        for (const key in entry) {
+            if (Object.prototype.hasOwnProperty.call(entry, key)) {
+                if (key !== 'distance') {
+                    outputText += `${key}: ${entry[key]}\n`;
+                }
+            }
+        }
+        
+        csvOutput.textContent = outputText; // Display the data
+        externalLinkContainer.innerHTML = ''; // Clear previous link
+
+        // Generate the required link
+        if (entry.PropertyName) {
+            const baseURL = "https://electrifychicago.net/building/";
+            
+            // 1. Normalize the property name using the new utility function
+            const normalizedName = toSlug(entry.PropertyName);
+
+            const finalURL = baseURL + normalizedName;
+
+            // 2. Create and append the link element
+            const linkElement = document.createElement('a');
+            linkElement.href = finalURL;
+            linkElement.target = '_blank';
+            linkElement.textContent = `View Building Details: ${entry.PropertyName}`;
+            
+            externalLinkContainer.appendChild(linkElement);
+            
+        } 
+        // If PropertyName is missing, the container remains empty
+    }
+    
+    // --- populateClosestSelector (omitted for brevity, assume it is correct) ---
+    function populateClosestSelector(userLat, userLon, isAccurate) {
+        clearMarkers();
+        const userMarker = addLocationMarker(userLat, userLon, isAccurate);
+
+        if (!allCsvData.length) {
+            closestSelect.innerHTML = '<option value="">CSV data not loaded.</option>';
+            map.setView([userLat, userLon], 10);
+            return;
+        }
+        
+        const entriesWithDistance = allCsvData
+            .map(entry => {
+                const entryLat = parseFloat(entry.Latitude);
+                const entryLon = parseFloat(entry.Longitude);
+                if (isNaN(entryLat) || isNaN(entryLon)) { return null; }
+                return { ...entry, distance: calculateDistance(userLat, userLon, entryLat, entryLon) };
+            })
+            .filter(entry => entry !== null);
+
+        entriesWithDistance.sort((a, b) => a.distance - b.distance);
+        const closestEntries = entriesWithDistance.slice(0, N_CLOSEST);
+        
+        closestSelect.innerHTML = '';
+        closestSelect.disabled = false;
+        
+        if (closestEntries.length === 0) {
+            closestSelect.innerHTML = '<option value="">No buildings found with coordinates.</option>';
+            closestSelect.disabled = true;
+            map.setView([userLat, userLon], 10);
+            return;
+        }
+
+        closestSelect.innerHTML += `<option value="" disabled selected>Select one of the ${closestEntries.length} closest entries:</option>`;
+        
+        const bounds = new L.LatLngBounds();
+        bounds.extend(userMarker.getLatLng());
+        let firstEntryKey = null;
+
+        closestEntries.forEach((entry, index) => {
+            const distanceText = entry.distance.toFixed(2);
+            const entryIdentifier = entry['Building ID'] || entry['Building Name'] || `Entry ${index + 1}`; 
+            const option = document.createElement('option');
+            
+            const entryJson = JSON.stringify(entry);
+            option.value = entryJson;
+            option.textContent = `${entryIdentifier} (${distanceText} km)`;
+            closestSelect.appendChild(option);
+            
+            const buildingMarker = addBuildingMarker(entry);
+            bounds.extend(buildingMarker.getLatLng());
+
+            if (index === 0) {
+                const entryLat = parseFloat(entry.Latitude);
+                const entryLon = parseFloat(entry.Longitude);
+                firstEntryKey = JSON.stringify({ lat: entryLat, lon: entryLon, id: entry['Building ID'] });
+            }
+        });
+
+        map.fitBounds(bounds, { padding: [50, 50] });
+
+        closestSelect.onchange = function() {
+            if (this.value) {
+                const selectedEntry = JSON.parse(this.value);
+                displayEntryDetails(selectedEntry);
+
+                const selectedKey = JSON.stringify({ 
+                    lat: parseFloat(selectedEntry.Latitude), 
+                    lon: parseFloat(selectedEntry.Longitude), 
+                    id: selectedEntry['Building ID'] 
+                });
+                highlightSelectedMarker(selectedKey);
+            }
+        };
+
+        if (closestEntries.length > 0) {
+            closestSelect.selectedIndex = 1;
+            displayEntryDetails(closestEntries[0]);
+            if (firstEntryKey) { highlightSelectedMarker(firstEntryKey); }
+        }
+    }
+
+
+    // --- Flow Control (omitted for brevity, assume it is correct) ---
+    function loadCsvData() {
+        Papa.parse(csvFilePath, {
+            download: true, header: true, dynamicTyping: true,
+            complete: function(results) {
+                allCsvData = results.data.filter(d => d.Latitude !== null && d.Longitude !== null && !isNaN(parseFloat(d.Latitude))); 
+                if (allCsvData.length === 0) { csvOutput.textContent = "CSV loaded, but no valid data entries with Latitude/Longitude were found."; } 
+                else { csvOutput.textContent = "CSV data loaded. Fetching location to determine closest entries..."; }
+                getGeolocation();
+            },
+            error: function(err) {
+                console.error("Error fetching or parsing CSV:", err);
+                csvOutput.textContent = "Error fetching 'building-benchmarks.csv'. Check console.";
+                getGeolocation();
+            }
+        });
+    }
+
+    function fallbackToIPLocation(geoError) {
+      geoOutput.textContent = `Geolocation failed (${geoError.message}). Falling back to IP-based location...`;
+
+      fetch(IPLOCATE_API)
+        .then(response => response.ok ? response.json() : Promise.reject(`Status: ${response.status}`))
+        .then(data => {
+          if (data.latitude && data.longitude) {
+            geoOutput.textContent = 
+              `Source: IP Lookup (Approximate)\nLatitude: ${data.latitude}\nLongitude: ${data.longitude}\nCity: ${data.city || 'N/A'}\nCountry: ${data.country || 'N/A'}`;
+            populateClosestSelector(data.latitude, data.longitude, false);
+          } else { geoOutput.textContent = "IP Location: Latitude/Longitude not found in response."; }
+        })
+        .catch(fetchError => {
+          geoOutput.textContent = `Error fetching IP location: ${fetchError.message}`;
+          console.error("Error fetching IP location:", fetchError);
+        });
+    }
+
+    function getGeolocation() {
+      if (navigator.geolocation) {
+        const geoOptions = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 };
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+            geoOutput.textContent = 
+              `Source: Device GPS/Location Service\nLatitude: ${lat}\nLongitude: ${lon}\nAccuracy: ${accuracy} meters`;
+            populateClosestSelector(lat, lon, true);
+          },
+          (error) => {
+            let userMessage = "";
+            switch(error.code) {
+              case error.PERMISSION_DENIED: userMessage = "Permission Denied"; break;
+              case error.TIMEOUT: userMessage = "Request Timed Out"; break;
+              default: userMessage = "Location Unavailable";
+            }
+            fallbackToIPLocation(new Error(userMessage));
+          },
+          geoOptions
+        );
+      } else {
+        fallbackToIPLocation(new Error("Geolocation not supported by browser."));
+      }
+    }
+
+
+    // Start the process
+    loadCsvData(); 
+    </script>
+
+  </body>
+</html>
