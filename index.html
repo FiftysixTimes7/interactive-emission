@@ -121,30 +121,55 @@
 
         const sortedIntensities = [...validIntensities].sort(d3.ascending);
         
+        // Define key percentiles based on the REVERSE grading logic: 
+        // A lower GHG value is better, so the values corresponding to P20, P40, P60, P80 (low intensity) 
+        // define the grade boundaries.
+
+        // P80_VALUE: Value separating the top 20% (A grade) from the rest (Grade < A)
+        const p80Value = d3.quantile(sortedIntensities, 0.80);
+        // P60_VALUE: Value separating the top 40% (A/B grade) from the rest (Grade < B)
+        const p60Value = d3.quantile(sortedIntensities, 0.60);
+        // P40_VALUE: Value separating the top 60% (A/B/C grade) from the rest (Grade < C)
+        const p40Value = d3.quantile(sortedIntensities, 0.40);
+        // P20_VALUE: Value separating the top 80% (A/B/C/D grade) from the rest (Grade = F)
+        const p20Value = d3.quantile(sortedIntensities, 0.20);
+
+
         ghgIntensityStats = {
-            min: 0, // Start bar at 0 for readability
+            min: 0,
             max: d3.max(validIntensities),
             mean: d3.mean(validIntensities),
-            median: d3.median(validIntensities),
-            p75: d3.quantile(sortedIntensities, 0.75) || d3.max(validIntensities), 
-            p90: d3.quantile(sortedIntensities, 0.90) || d3.max(validIntensities),
+            // Use intensity percentiles derived from the grading scheme (P80 means lowest intensity values)
+            boundaryA: p20Value, // Buildings below this value get C or better (40th percentile grade)
+            boundaryB: p40Value, // Buildings below this value get B or better (60th percentile grade)
+            boundaryC: p60Value, // Buildings below this value get A or better (80th percentile grade)
+            boundaryD: p80Value, // Buildings below this value get A grade (100th percentile grade)
         };
 
         // Use the 95th percentile as the maximum visible domain to handle extreme outliers
         ghgIntensityStats.visMax = d3.quantile(sortedIntensities, 0.95) || ghgIntensityStats.max;
 
-        // Fallback: If 95th percentile is unreasonably low, use the max.
-        if (ghgIntensityStats.visMax < ghgIntensityStats.mean * 2) {
-            ghgIntensityStats.visMax = ghgIntensityStats.max;
+        // Fallback check
+        if (ghgIntensityStats.visMax < ghgIntensityStats.mean * 2 && ghgIntensityStats.max > ghgIntensityStats.mean * 3) {
+            ghgIntensityStats.visMax = ghgIntensityStats.mean * 3;
         }
     }
 
-    // Color gradient function: Lower intensity (Green) is better.
+    // Color gradient function based on the defined percentile boundaries (Lower intensity is better)
     function getColor(value) {
-        if (value <= ghgIntensityStats.median) return '#10b981'; // Green (Excellent)
-        if (value <= ghgIntensityStats.p75) return '#facc15';    // Yellow (Average/Above)
-        if (value <= ghgIntensityStats.p90) return '#fb923c';    // Orange (Poor)
-        return '#ef4444';                                        // Red (Very Poor)
+        if (!ghgIntensityStats.max) return '#6b7280'; // Gray if data loading
+
+        // Note: The grading logic works in reverse. Lower GHGIntensity = Better Grade (higher percentile score)
+        
+        // A Grade (Top 20% of buildings)
+        if (value <= ghgIntensityStats.boundaryC) return '#10b981'; // Green 
+        // B Grade (Next 20%)
+        if (value <= ghgIntensityStats.boundaryB) return '#facc15'; // Yellow
+        // C Grade (Next 20%)
+        if (value <= ghgIntensityStats.boundaryA) return '#fb923c'; // Orange
+        
+        // D/F Grade (Bottom 40%)
+        return '#ef4444'; // Red                                        
     }
 
     function renderIntensityWidget(currentIntensity) {
@@ -157,8 +182,7 @@
         container.html(""); // Clear previous visualization
         
         // Configuration
-        const margin = { top: 15, right: 30, bottom: 40, left: 30 };
-        // Use clientWidth to make the SVG responsive to the container width
+        const margin = { top: 25, right: 30, bottom: 40, left: 30 }; // Increased top margin
         const width = ghgIntensityWidget.clientWidth - margin.left - margin.right;
         const height = 100 - margin.top - margin.bottom;
 
@@ -176,16 +200,20 @@
             .domain([ghgIntensityStats.min, domainMax])
             .range([0, width]);
 
-        // 3. Draw the background context (Quartile/Percentile Zones)
+        // 3. Draw the background context (Grade Zones)
         const backgroundData = [
-            { start: ghgIntensityStats.min, end: ghgIntensityStats.median, color: 'rgba(16, 185, 129, 0.1)' }, // Q1+Q2 (Green zone)
-            { start: ghgIntensityStats.median, end: ghgIntensityStats.p75, color: 'rgba(250, 204, 21, 0.1)' }, // Q3 (Yellow zone)
-            { start: ghgIntensityStats.p75, end: ghgIntensityStats.p90, color: 'rgba(251, 146, 60, 0.1)' }, // Q4 (Orange zone)
-            { start: ghgIntensityStats.p90, end: domainMax, color: 'rgba(239, 68, 68, 0.1)' } // Top 10% (Red zone)
+            // F/D Grade Zone (Highest Intensity)
+            { start: ghgIntensityStats.boundaryA, end: domainMax, color: 'rgba(239, 68, 68, 0.1)', label: "D/F (Worst 40%)" }, 
+            // C Grade Zone
+            { start: ghgIntensityStats.boundaryB, end: ghgIntensityStats.boundaryA, color: 'rgba(251, 146, 60, 0.1)', label: "C (40-60%)" }, 
+            // B Grade Zone
+            { start: ghgIntensityStats.boundaryC, end: ghgIntensityStats.boundaryB, color: 'rgba(250, 204, 21, 0.1)', label: "B (60-80%)" }, 
+            // A Grade Zone (Lowest Intensity)
+            { start: ghgIntensityStats.min, end: ghgIntensityStats.boundaryC, color: 'rgba(16, 185, 129, 0.1)', label: "A (Top 20%)" },
         ];
 
         svg.selectAll(".bg-rect")
-            .data(backgroundData)
+            .data(backgroundData.filter(d => d.start < domainMax)) // Filter out ranges that start above the visual max
             .enter()
             .append("rect")
             .attr("class", "bg-rect")
@@ -194,6 +222,19 @@
             .attr("height", height)
             .attr("width", d => x(Math.min(d.end, domainMax)) - x(d.start)) 
             .attr("fill", d => d.color);
+
+        // Add labels to the zones for better context
+        svg.selectAll(".zone-label")
+            .data(backgroundData.filter(d => x(Math.min(d.end, domainMax)) - x(d.start) > 50)) // Only label large enough zones
+            .enter()
+            .append("text")
+            .attr("class", "zone-label")
+            .attr("x", d => x(d.start) + (x(Math.min(d.end, domainMax)) - x(d.start)) / 2)
+            .attr("y", height / 2 + 2)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .attr("fill", "#6b7280")
+            .text(d => d.label);
 
         // 4. Draw the X-Axis
         const xAxis = d3.axisBottom(x).ticks(5).tickFormat(d3.format(".1f"));
@@ -219,6 +260,7 @@
             .attr("stroke-dasharray", "4")
             .attr("stroke-width", 1);
         
+        // Mean label (Adjusted Y position to fit in the new margin)
         svg.append("text")
             .attr("x", meanX)
             .attr("y", -5)
@@ -236,26 +278,26 @@
         svg.append("line")
             .attr("x1", indicatorX)
             .attr("x2", indicatorX)
-            .attr("y1", -10)
+            .attr("y1", -5) // Start line lower
             .attr("y2", height + 5)
             .attr("stroke", indicatorColor)
             .attr("stroke-width", 3);
 
-        // Value Label
+        // Value Label (Adjusted Y position to fit in the new margin)
         svg.append("text")
             .attr("x", indicatorX)
-            .attr("y", -15) 
+            .attr("y", -10) // Moved down significantly
             .attr("text-anchor", indicatorX < width * 0.1 ? "start" : (indicatorX > width * 0.9 ? "end" : "middle"))
             .attr("fill", indicatorColor)
             .attr("font-weight", "bold")
             .attr("font-size", "14px")
-            .text(`Your Building: ${indicatorValueText}`);
+            .text(`This Building: ${indicatorValueText}`);
 
         // Note if the value is capped
         if (currentIntensity > domainMax) {
              svg.append("text")
                 .attr("x", x(domainMax))
-                .attr("y", 10)
+                .attr("y", -5)
                 .attr("text-anchor", "end")
                 .attr("fill", indicatorColor)
                 .attr("font-size", "10px")
