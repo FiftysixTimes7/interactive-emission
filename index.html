@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Camera, Closest Data, Geolocation, Map, and External Link</title>
+    <title>Interactive Emission Visualizer</title>
+    <!-- D3 Library for data visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script> 
     <!-- PapaParse Library for CSV parsing -->
     <script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
 
@@ -73,9 +75,12 @@
     
     <!-- Placeholder for the CSV data output (details of the selected entry) -->
     <pre id="csv-output">Select a building above to see its data.</pre>
-    <!-- NEW: Placeholder for the external link -->
+    <!-- Placeholder for the external link -->
     <div id="external-link-container"></div>
 
+    <!-- Emission Intensity Widget -->
+    <h3>GHG Emission Intensity (GHGIntensity)</h3>
+    <div id="ghg-intensity-widget"></div>
 
     <script>
     const video = document.getElementById('video');
@@ -85,6 +90,7 @@
     const nClosestCountSpan = document.getElementById('n-closest-count');
     const externalLinkContainer = document.getElementById('external-link-container');
     const gradeOverlay = document.getElementById('grade-overlay'); 
+    const ghgIntensityWidget = document.getElementById('ghg-intensity-widget');
 
     const csvFilePath = 'https://raw.githubusercontent.com/vkoves/electrify-chicago/refs/heads/main/src/data/dist/building-benchmarks.csv'; 
     const IPLOCATE_API = 'https://iplocate.io/api/lookup'; 
@@ -101,6 +107,161 @@
     const USER_MARKER_STYLE = { radius: 8, weight: 1, opacity: 1, fillOpacity: 0.7 };
     const BUILDING_DEFAULT_STYLE = { radius: 6, weight: 1, opacity: 1, fillOpacity: 0.8, color: '#f59e0b', fillColor: '#f59e0b' };
     const BUILDING_HIGHLIGHT_STYLE = { radius: 10, weight: 2, opacity: 1, fillOpacity: 1, color: '#ef4444', fillColor: '#ef4444' };
+
+    // --- GHG Intensity Statistics ---
+    let ghgIntensityStats = {};
+
+    function calculateGhgStats(data) {
+        // Filter out invalid/null values and ensure positive intensity
+        const validIntensities = data
+            .map(d => parseFloat(d.GHGIntensity))
+            .filter(v => !isNaN(v) && v > 0);
+
+        if (validIntensities.length === 0) return;
+
+        const sortedIntensities = [...validIntensities].sort(d3.ascending);
+        
+        ghgIntensityStats = {
+            min: 0, // Start bar at 0 for readability
+            max: d3.max(validIntensities),
+            mean: d3.mean(validIntensities),
+            median: d3.median(validIntensities),
+            p75: d3.quantile(sortedIntensities, 0.75) || d3.max(validIntensities), 
+            p90: d3.quantile(sortedIntensities, 0.90) || d3.max(validIntensities),
+        };
+
+        // Use the 95th percentile as the maximum visible domain to handle extreme outliers
+        ghgIntensityStats.visMax = d3.quantile(sortedIntensities, 0.95) || ghgIntensityStats.max;
+
+        // Fallback: If 95th percentile is unreasonably low, use the max.
+        if (ghgIntensityStats.visMax < ghgIntensityStats.mean * 2) {
+            ghgIntensityStats.visMax = ghgIntensityStats.max;
+        }
+    }
+
+    // Color gradient function: Lower intensity (Green) is better.
+    function getColor(value) {
+        if (value <= ghgIntensityStats.median) return '#10b981'; // Green (Excellent)
+        if (value <= ghgIntensityStats.p75) return '#facc15';    // Yellow (Average/Above)
+        if (value <= ghgIntensityStats.p90) return '#fb923c';    // Orange (Poor)
+        return '#ef4444';                                        // Red (Very Poor)
+    }
+
+    function renderIntensityWidget(currentIntensity) {
+        if (!ghgIntensityStats.max || isNaN(currentIntensity)) {
+            d3.select("#ghg-intensity-widget").html("<p>GHG Intensity data is unavailable or loading.</p>");
+            return;
+        }
+
+        const container = d3.select("#ghg-intensity-widget");
+        container.html(""); // Clear previous visualization
+        
+        // Configuration
+        const margin = { top: 15, right: 30, bottom: 40, left: 30 };
+        // Use clientWidth to make the SVG responsive to the container width
+        const width = ghgIntensityWidget.clientWidth - margin.left - margin.right;
+        const height = 100 - margin.top - margin.bottom;
+
+        const domainMax = ghgIntensityStats.visMax;
+        
+        // 1. Create SVG container
+        const svg = container.append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // 2. Define the Scale
+        const x = d3.scaleLinear()
+            .domain([ghgIntensityStats.min, domainMax])
+            .range([0, width]);
+
+        // 3. Draw the background context (Quartile/Percentile Zones)
+        const backgroundData = [
+            { start: ghgIntensityStats.min, end: ghgIntensityStats.median, color: 'rgba(16, 185, 129, 0.1)' }, // Q1+Q2 (Green zone)
+            { start: ghgIntensityStats.median, end: ghgIntensityStats.p75, color: 'rgba(250, 204, 21, 0.1)' }, // Q3 (Yellow zone)
+            { start: ghgIntensityStats.p75, end: ghgIntensityStats.p90, color: 'rgba(251, 146, 60, 0.1)' }, // Q4 (Orange zone)
+            { start: ghgIntensityStats.p90, end: domainMax, color: 'rgba(239, 68, 68, 0.1)' } // Top 10% (Red zone)
+        ];
+
+        svg.selectAll(".bg-rect")
+            .data(backgroundData)
+            .enter()
+            .append("rect")
+            .attr("class", "bg-rect")
+            .attr("x", d => x(d.start))
+            .attr("y", 0)
+            .attr("height", height)
+            .attr("width", d => x(Math.min(d.end, domainMax)) - x(d.start)) 
+            .attr("fill", d => d.color);
+
+        // 4. Draw the X-Axis
+        const xAxis = d3.axisBottom(x).ticks(5).tickFormat(d3.format(".1f"));
+        svg.append("g")
+            .attr("transform", `translate(0, ${height})`)
+            .call(xAxis)
+            .append("text")
+            .attr("fill", "#000")
+            .attr("x", width / 2)
+            .attr("y", 35)
+            .attr("font-size", "12px")
+            .attr("text-anchor", "middle")
+            .text("GHG Intensity (kg CO2e / sq ft)");
+
+        // 5. Add Reference Lines (Mean)
+        const meanX = x(ghgIntensityStats.mean);
+        svg.append("line")
+            .attr("x1", meanX)
+            .attr("x2", meanX)
+            .attr("y1", 0)
+            .attr("y2", height)
+            .attr("stroke", "#374151")
+            .attr("stroke-dasharray", "4")
+            .attr("stroke-width", 1);
+        
+        svg.append("text")
+            .attr("x", meanX)
+            .attr("y", -5)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .text(`Avg: ${ghgIntensityStats.mean.toFixed(1)}`);
+
+
+        // 6. Draw the Indicator (Needle) for the current building
+        const indicatorX = x(Math.min(currentIntensity, domainMax));
+        const indicatorColor = getColor(currentIntensity);
+        const indicatorValueText = currentIntensity.toFixed(1);
+
+        // Vertical Line/Needle
+        svg.append("line")
+            .attr("x1", indicatorX)
+            .attr("x2", indicatorX)
+            .attr("y1", -10)
+            .attr("y2", height + 5)
+            .attr("stroke", indicatorColor)
+            .attr("stroke-width", 3);
+
+        // Value Label
+        svg.append("text")
+            .attr("x", indicatorX)
+            .attr("y", -15) 
+            .attr("text-anchor", indicatorX < width * 0.1 ? "start" : (indicatorX > width * 0.9 ? "end" : "middle"))
+            .attr("fill", indicatorColor)
+            .attr("font-weight", "bold")
+            .attr("font-size", "14px")
+            .text(`Your Building: ${indicatorValueText}`);
+
+        // Note if the value is capped
+        if (currentIntensity > domainMax) {
+             svg.append("text")
+                .attr("x", x(domainMax))
+                .attr("y", 10)
+                .attr("text-anchor", "end")
+                .attr("fill", indicatorColor)
+                .attr("font-size", "10px")
+                .text(`(${indicatorValueText} is above scale cap)`);
+        }
+    }
 
     // --- Camera Initialization ---
     function initializeCamera() {
@@ -209,7 +370,11 @@
         // Update the grade overlay text
         const grade = entry.AvgPercentileLetterGrade || 'N/A';
         gradeOverlay.textContent = `Grade: ${grade}`; 
-        
+
+        // RENDER WIDGET: Extract intensity and render the bar
+        const ghgIntensity = parseFloat(entry.GHGIntensity);
+        renderIntensityWidget(ghgIntensity);
+ 
         // Generate the building data text
         for (const key in entry) {
             if (Object.prototype.hasOwnProperty.call(entry, key)) {
@@ -218,14 +383,14 @@
                 }
             }
         }
-        
+ 
         csvOutput.textContent = outputText; // Display the data
         externalLinkContainer.innerHTML = ''; // Clear previous link
 
         // Generate the required link
         if (entry.PropertyName) {
             const baseURL = "https://electrifychicago.net/building/";
-            
+ 
             // 1. Normalize the property name using the new utility function
             const normalizedName = toSlug(entry.PropertyName);
 
@@ -236,9 +401,9 @@
             linkElement.href = finalURL;
             linkElement.target = '_blank';
             linkElement.textContent = `View Building Details: ${entry.PropertyName}`;
-            
+ 
             externalLinkContainer.appendChild(linkElement);
-            
+ 
         } 
         // If PropertyName is missing, the container remains empty
     }
@@ -332,6 +497,7 @@
             download: true, header: true, dynamicTyping: true,
             complete: function(results) {
                 allCsvData = results.data.filter(d => d.Latitude !== null && d.Longitude !== null && !isNaN(parseFloat(d.Latitude))); 
+                calculateGhgStats(allCsvData); 
                 if (allCsvData.length === 0) { csvOutput.textContent = "CSV loaded, but no valid data entries with Latitude/Longitude were found."; } 
                 else { csvOutput.textContent = "CSV data loaded. Fetching location to determine closest entries..."; }
                 getGeolocation();
