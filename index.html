@@ -192,6 +192,8 @@
     // Storing references to markers to highlight them later
     const buildingMarkersMap = new Map();
     let ghgIntensityStats = {};
+
+    let selectedEntry = null; // Store the current building so we can re-draw on resize
     
     // View State
     let isCameraMode = true;
@@ -307,7 +309,7 @@
 
         const rect = widgetContainer.getBoundingClientRect();
         // Tighter margins
-        const margin = { top: 10, right: 15, bottom: 5, left: 15 };
+        const margin = { top: 15, right: 15, bottom: 5, left: 15 };
         const width = rect.width - margin.left - margin.right;
         const height = rect.height - margin.top - margin.bottom;
         const domainMax = ghgIntensityStats.visMax;
@@ -374,7 +376,7 @@
         // 5. Value Text (Aligned to the right, vertically centered with title)
         svg.append("text")
             .attr("x", width)
-            .attr("y", 5) // Aligned with the top area
+            .attr("y", 0) // Aligned with the top area
             .attr("text-anchor", "end")
             .attr("fill", cColor)
             .attr("font-weight", "bold")
@@ -418,6 +420,8 @@
     initializeMap();
 
     function updateUI(entry) {
+        selectedEntry = entry;
+
         loadingIndicator.style.display = 'none';
 
         // Update Top Link
@@ -544,6 +548,16 @@
             })
             .catch(err => console.error("IP Geo Error", err));
     }
+
+    // --- Window Resize Handler ---
+    window.addEventListener('resize', () => {
+        if (selectedEntry) {
+            // If we have a building selected, re-draw the widget 
+            // to fit the new screen width
+            const intensity = parseFloat(selectedEntry.GHGIntensity);
+            renderIntensityWidget(intensity);
+        }
+    });
 
     // Start Application
     loadCsvData();
