@@ -1,118 +1,270 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Interactive Emission Visualizer</title>
-    <!-- D3 Library for data visualization -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Electrify Chicago - Emission Visualizer</title>
+    
+    <!-- Libraries -->
     <script src="https://d3js.org/d3.v7.min.js"></script> 
-    <!-- PapaParse Library for CSV parsing -->
     <script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
-
-    <!-- Leaflet CSS and JS Includes -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SVRUfmW7o8SUwESrCSx="
-     crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-     integrity="sha256-20n6a9c42z65Z50Qo0v/R7sR5U8i7n0s7f1lM2+fM3E="
-     crossorigin=""></script>
+    
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/SVRUfmW7o8SUwESrCSx=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20n6a9c42z65Z50Qo0v/R7sR5U8i7n0s7f1lM2+fM3E=" crossorigin=""></script>
 
     <style>
-      /* Simple styling for better separation and readability */
-      body { font-family: sans-serif; }
-      pre, select { white-space: pre-wrap; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; background-color: #f7f7f7; }
-      #video { max-width: 100%; height: auto; display: block; margin-bottom: 20px; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #000;
+            overflow: hidden;
+        }
 
-      /* Container for the video and overlay */
-      #video-container { 
-        position: relative; /* Essential for absolute positioning of the overlay */
-        max-width: 100%; 
-        margin-bottom: 20px; 
-      }
-      #video { 
-        max-width: 100%; 
-        height: auto; 
-        display: block; 
-      }
+        /* --- Layers --- */
+        #app-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
 
-      /* Overlay styling for the grade */
-      #grade-overlay {
-        position: absolute;
-        top: 10px; /* Position from the top */
-        left: 10px; /* Position from the left */
-        color: white; /* High contrast text */
-        background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
-        padding: 5px 10px;
-        font-size: 2em; 
-        font-weight: bold;
-        border-radius: 5px;
-        z-index: 10; /* Ensure it's above the video */
-      }
+        .view-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
 
-      h3 { margin-top: 20px; }
-      #map { height: 400px; width: 100%; border: 1px solid #ccc; margin-bottom: 20px;}
+        #video {
+            object-fit: cover;
+            z-index: 1;
+            background: #111;
+        }
+
+        #map {
+            z-index: 2;
+            background: #eee;
+        }
+
+        /* State Classes */
+        .hidden-layer {
+            opacity: 0;
+            pointer-events: none;
+            z-index: 0 !important;
+        }
+        .active-layer {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 2 !important;
+        }
+
+        /* --- UI Overlays --- */
+        
+        /* Top Bar: Centered to avoid map controls */
+        #top-overlay {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%); /* Center horizontally */
+            width: auto;
+            max-width: 60%; /* Prevent it from hitting the sides */
+            z-index: 20;
+            display: flex;
+            justify-content: center;
+        }
+
+        #building-link {
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-size: 0.9rem; /* Smaller font */
+            font-weight: 500;
+            
+            /* Text Truncation logic */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+            max-width: 100%;
+            
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        #building-link:hover {
+            border-color: #10b981;
+        }
+
+        /* Toggle Button (Top Right) */
+        #view-toggle-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 21;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        /* Compact Bottom Widget */
+        #ghg-intensity-widget {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px; /* Reduced from 80px for a tighter look */
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%); /* Smoother fade */
+            z-index: 20;
+            padding-bottom: 10px; /* Safe area for bottom of screen */
+            pointer-events: none; 
+        }
+
+        #loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            z-index: 30;
+            text-align: center;
+            pointer-events: none;
+            background: rgba(0,0,0,0.6);
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
     </style>
-  </head>
-  <body>
+</head>
+<body>
 
-    <!-- Video element for the camera stream -->
-    <div id="video-container">
-      <video id="video" autoplay playsinline></video>
-      <div id="grade-overlay"></div>
+    <div id="app-container">
+        <!-- View 1: Camera -->
+        <video id="video" class="view-layer active-layer" autoplay playsinline muted></video>
+
+        <!-- View 2: Map -->
+        <div id="map" class="view-layer hidden-layer"></div>
+
+        <!-- UI: Top Overlay (Centered) -->
+        <div id="top-overlay">
+            <a id="building-link" href="#" target="_blank">Locating...</a>
+        </div>
+
+        <!-- UI: View Toggle -->
+        <button id="view-toggle-btn" title="Toggle Camera/Map">🗺️</button>
+
+        <!-- UI: Bottom Widget -->
+        <div id="ghg-intensity-widget"></div>
+
+        <!-- Loading Status -->
+        <div id="loading-indicator">Loading Data...</div>
     </div>
 
-    <!-- Placeholder for the Geolocation output -->
-    <h3>Geolocation</h3>
-    <pre id="geo-output">Fetching location...</pre>
-
-    <!-- Map Container -->
-    <h3>Map of Closest Entries</h3>
-    <div id="map"></div>
-
-    <!-- Selector for Closest Entries -->
-    <h3>Closest Building Benchmarks (Top <span id="n-closest-count">3</span>)</h3>
-    <select id="closest-entries-select" disabled>
-      <option value="">Locating closest buildings...</option>
-    </select>
-    
-    <!-- Placeholder for the CSV data output (details of the selected entry) -->
-    <pre id="csv-output">Select a building above to see its data.</pre>
-    <!-- Placeholder for the external link -->
-    <div id="external-link-container"></div>
-
-    <!-- Emission Intensity Widget -->
-    <h3>GHG Emission Intensity (GHGIntensity)</h3>
-    <div id="ghg-intensity-widget"></div>
-
     <script>
-    const video = document.getElementById('video');
-    const csvOutput = document.getElementById('csv-output');
-    const geoOutput = document.getElementById('geo-output');
-    const closestSelect = document.getElementById('closest-entries-select');
-    const nClosestCountSpan = document.getElementById('n-closest-count');
-    const externalLinkContainer = document.getElementById('external-link-container');
-    const gradeOverlay = document.getElementById('grade-overlay'); 
-    const ghgIntensityWidget = document.getElementById('ghg-intensity-widget');
+    // --- DOM Elements ---
+    const videoElement = document.getElementById('video');
+    const mapElement = document.getElementById('map');
+    const buildingLink = document.getElementById('building-link');
+    const toggleBtn = document.getElementById('view-toggle-btn');
+    const widgetContainer = document.getElementById('ghg-intensity-widget');
+    const loadingIndicator = document.getElementById('loading-indicator');
 
-    const csvFilePath = 'https://raw.githubusercontent.com/vkoves/electrify-chicago/refs/heads/main/src/data/dist/building-benchmarks.csv'; 
+    // --- Constants & State ---
+    const CSV_FILE_PATH = 'https://raw.githubusercontent.com/vkoves/electrify-chicago/refs/heads/main/src/data/dist/building-benchmarks.csv'; 
     const IPLOCATE_API = 'https://iplocate.io/api/lookup'; 
-    const N_CLOSEST = 3;
-
-    nClosestCountSpan.textContent = N_CLOSEST;
-
+    
     let allCsvData = [];
     let map;
     let markersLayer;
-    const buildingMarkersMap = new Map(); 
-
-    // Define marker styles
-    const USER_MARKER_STYLE = { radius: 8, weight: 1, opacity: 1, fillOpacity: 0.7 };
-    const BUILDING_DEFAULT_STYLE = { radius: 6, weight: 1, opacity: 1, fillOpacity: 0.8, color: '#f59e0b', fillColor: '#f59e0b' };
-    const BUILDING_HIGHLIGHT_STYLE = { radius: 10, weight: 2, opacity: 1, fillOpacity: 1, color: '#ef4444', fillColor: '#ef4444' };
-
-    // --- GHG Intensity Statistics ---
+    // Storing references to markers to highlight them later
+    const buildingMarkersMap = new Map();
     let ghgIntensityStats = {};
+    
+    // View State
+    let isCameraMode = true;
+    let cameraStream = null;
+
+    // --- 1. View Controller & Battery Saving Logic ---
+
+    function toggleView() {
+        if (isCameraMode) {
+            activateMap();
+        } else {
+            activateCamera();
+        }
+    }
+
+    function activateMap() {
+        isCameraMode = false;
+        // UI Updates
+        videoElement.classList.replace('active-layer', 'hidden-layer');
+        mapElement.classList.replace('hidden-layer', 'active-layer');
+        toggleBtn.textContent = "📷"; 
+        
+        // Stop Camera to save battery
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+
+        // Refresh map layout
+        setTimeout(() => { map.invalidateSize(); }, 300);
+    }
+
+    async function activateCamera() {
+        // Start Camera
+        const success = await startCameraStream();
+        
+        if (success) {
+            isCameraMode = true;
+            // UI Updates
+            mapElement.classList.replace('active-layer', 'hidden-layer');
+            videoElement.classList.replace('hidden-layer', 'active-layer');
+            toggleBtn.textContent = "🗺️";
+        } else {
+            alert("Camera access denied or unavailable.");
+            activateMap();
+        }
+    }
+
+    async function startCameraStream() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment' } 
+            });
+            videoElement.srcObject = stream;
+            cameraStream = stream;
+            return true;
+        } catch (err) {
+            console.error("Camera Error:", err);
+            return false;
+        }
+    }
+
+    toggleBtn.addEventListener('click', toggleView);
+
+    // Initial Camera Start
+    startCameraStream().then(success => {
+        if(!success) activateMap();
+    });
+
+
+    // --- 2. Data & Statistics Logic ---
 
     function calculateGhgStats(data) {
-        // Filter out invalid/null values and ensure positive intensity
         const validIntensities = data
             .map(d => parseFloat(d.GHGIntensity))
             .filter(v => !isNaN(v) && v > 0);
@@ -121,268 +273,125 @@
 
         const sortedIntensities = [...validIntensities].sort(d3.ascending);
         
-        // Define key percentiles based on the REVERSE grading logic: 
-        // A lower GHG value is better, so the values corresponding to P20, P40, P60, P80 (low intensity) 
-        // define the grade boundaries.
-
-        // P80_VALUE: Value separating the top 20% (A grade) from the rest (Grade < A)
-        const p80Value = d3.quantile(sortedIntensities, 0.80);
-        // P60_VALUE: Value separating the top 40% (A/B grade) from the rest (Grade < B)
-        const p60Value = d3.quantile(sortedIntensities, 0.60);
-        // P40_VALUE: Value separating the top 60% (A/B/C grade) from the rest (Grade < C)
-        const p40Value = d3.quantile(sortedIntensities, 0.40);
-        // P20_VALUE: Value separating the top 80% (A/B/C/D grade) from the rest (Grade = F)
-        const p20Value = d3.quantile(sortedIntensities, 0.20);
-
-
         ghgIntensityStats = {
             min: 0,
             max: d3.max(validIntensities),
-            mean: d3.mean(validIntensities),
-            // Use intensity percentiles derived from the grading scheme (P80 means lowest intensity values)
-            boundaryA: p20Value, // Buildings below this value get C or better (40th percentile grade)
-            boundaryB: p40Value, // Buildings below this value get B or better (60th percentile grade)
-            boundaryC: p60Value, // Buildings below this value get A or better (80th percentile grade)
-            boundaryD: p80Value, // Buildings below this value get A grade (100th percentile grade)
+            // Grading boundaries (Lower intensity = Better grade)
+            boundaryA: d3.quantile(sortedIntensities, 0.20), 
+            boundaryB: d3.quantile(sortedIntensities, 0.40), 
+            boundaryC: d3.quantile(sortedIntensities, 0.60), 
+            boundaryD: d3.quantile(sortedIntensities, 0.80),
+            visMax: d3.quantile(sortedIntensities, 0.95) || d3.max(validIntensities)
         };
-
-        // Use the 95th percentile as the maximum visible domain to handle extreme outliers
-        ghgIntensityStats.visMax = d3.quantile(sortedIntensities, 0.95) || ghgIntensityStats.max;
-
-        // Fallback check
-        if (ghgIntensityStats.visMax < ghgIntensityStats.mean * 2 && ghgIntensityStats.max > ghgIntensityStats.mean * 3) {
-            ghgIntensityStats.visMax = ghgIntensityStats.mean * 3;
-        }
     }
 
-    // Color gradient function based on the defined percentile boundaries (Lower intensity is better)
     function getColor(value) {
-        if (!ghgIntensityStats.max) return '#6b7280'; // Gray if data loading
-
-        // Note: The grading logic works in reverse. Lower GHGIntensity = Better Grade (higher percentile score)
-        
-        // A Grade (Top 20% of buildings)
-        if (value <= ghgIntensityStats.boundaryC) return '#10b981'; // Green 
-        // B Grade (Next 20%)
+        if (!ghgIntensityStats.max) return '#6b7280';
+        if (value <= ghgIntensityStats.boundaryA) return '#10b981'; // Green
         if (value <= ghgIntensityStats.boundaryB) return '#facc15'; // Yellow
-        // C Grade (Next 20%)
-        if (value <= ghgIntensityStats.boundaryA) return '#fb923c'; // Orange
-        
-        // D/F Grade (Bottom 40%)
-        return '#ef4444'; // Red                                        
+        if (value <= ghgIntensityStats.boundaryC) return '#fb923c'; // Orange
+        return '#ef4444'; // Red
     }
+
+    // --- 3. Compact Visualization Widget ---
 
     function renderIntensityWidget(currentIntensity) {
+        const container = d3.select("#ghg-intensity-widget");
+        container.html(""); 
+
         if (!ghgIntensityStats.max || isNaN(currentIntensity)) {
-            d3.select("#ghg-intensity-widget").html("<p>GHG Intensity data is unavailable or loading.</p>");
+            // Adjusted padding for the smaller height
+            container.html("<div style='color:#ccc; font-size:0.8rem; text-align:center; padding-top:25px'>Select a building</div>");
             return;
         }
 
-        const container = d3.select("#ghg-intensity-widget");
-        container.html(""); // Clear previous visualization
-        
-        // Configuration
-        const margin = { top: 25, right: 30, bottom: 40, left: 30 }; // Increased top margin
-        const width = ghgIntensityWidget.clientWidth - margin.left - margin.right;
-        const height = 100 - margin.top - margin.bottom;
-
+        const rect = widgetContainer.getBoundingClientRect();
+        // Tighter margins
+        const margin = { top: 10, right: 15, bottom: 5, left: 15 };
+        const width = rect.width - margin.left - margin.right;
+        const height = rect.height - margin.top - margin.bottom;
         const domainMax = ghgIntensityStats.visMax;
-        
-        // 1. Create SVG container
+
         const svg = container.append("svg")
             .attr("width", width + margin.left + margin.right)
             .attr("height", height + margin.top + margin.bottom)
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        // 2. Define the Scale
-        const x = d3.scaleLinear()
-            .domain([ghgIntensityStats.min, domainMax])
-            .range([0, width]);
+        const x = d3.scaleLinear().domain([0, domainMax]).range([0, width]);
 
-        // 3. Draw the background context (Grade Zones)
-        const backgroundData = [
-            // F/D Grade Zone (Highest Intensity)
-            { start: ghgIntensityStats.boundaryA, end: domainMax, color: 'rgba(239, 68, 68, 0.1)', label: "D/F (Worst 40%)" }, 
-            // C Grade Zone
-            { start: ghgIntensityStats.boundaryB, end: ghgIntensityStats.boundaryA, color: 'rgba(251, 146, 60, 0.1)', label: "C (40-60%)" }, 
-            // B Grade Zone
-            { start: ghgIntensityStats.boundaryC, end: ghgIntensityStats.boundaryB, color: 'rgba(250, 204, 21, 0.1)', label: "B (60-80%)" }, 
-            // A Grade Zone (Lowest Intensity)
-            { start: ghgIntensityStats.min, end: ghgIntensityStats.boundaryC, color: 'rgba(16, 185, 129, 0.1)', label: "A (Top 20%)" },
+        // Zones
+        const zones = [
+            { start: 0, end: ghgIntensityStats.boundaryA, color: '#10b981' },
+            { start: ghgIntensityStats.boundaryA, end: ghgIntensityStats.boundaryB, color: '#facc15' },
+            { start: ghgIntensityStats.boundaryB, end: ghgIntensityStats.boundaryC, color: '#fb923c' },
+            { start: ghgIntensityStats.boundaryC, end: domainMax, color: '#ef4444' }
         ];
 
-        svg.selectAll(".bg-rect")
-            .data(backgroundData.filter(d => d.start < domainMax)) // Filter out ranges that start above the visual max
-            .enter()
-            .append("rect")
-            .attr("class", "bg-rect")
-            .attr("x", d => x(d.start))
+        // 1. Title (Moved higher up, y=0 relative to margin)
+        svg.append("text")
+            .attr("x", 0)
             .attr("y", 0)
-            .attr("height", height)
-            .attr("width", d => x(Math.min(d.end, domainMax)) - x(d.start)) 
-            .attr("fill", d => d.color);
+            .attr("fill", "#9ca3af")
+            .attr("font-size", "9px") // Slightly smaller
+            .style("text-transform", "uppercase")
+            .text("GHG Intensity (kg CO2e/sq ft)");
 
-        // Add labels to the zones for better context
-        svg.selectAll(".zone-label")
-            .data(backgroundData.filter(d => x(Math.min(d.end, domainMax)) - x(d.start) > 50)) // Only label large enough zones
-            .enter()
-            .append("text")
-            .attr("class", "zone-label")
-            .attr("x", d => x(d.start) + (x(Math.min(d.end, domainMax)) - x(d.start)) / 2)
-            .attr("y", height / 2 + 2)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .attr("fill", "#6b7280")
-            .text(d => d.label);
+        // 2. Color Bar (Moved up to y=8)
+        const barY = 8;
+        const barHeight = 6;
+        
+        svg.selectAll(".zone")
+            .data(zones)
+            .enter().append("rect")
+            .attr("x", d => x(d.start))
+            .attr("y", barY) 
+            .attr("width", d => Math.max(0, x(Math.min(d.end, domainMax)) - x(d.start)))
+            .attr("height", barHeight)
+            .attr("fill", d => d.color)
+            .attr("opacity", 0.6)
+            .attr("rx", 2);
 
-        // 4. Draw the X-Axis
-        const xAxis = d3.axisBottom(x).ticks(5).tickFormat(d3.format(".1f"));
+        // 3. Ticks (Just small lines below bar)
+        const xAxis = d3.axisBottom(x).ticks(5).tickSize(3).tickFormat("");
         svg.append("g")
-            .attr("transform", `translate(0, ${height})`)
+            .attr("transform", `translate(0, ${barY + barHeight})`)
             .call(xAxis)
-            .append("text")
-            .attr("fill", "#000")
-            .attr("x", width / 2)
-            .attr("y", 35)
-            .attr("font-size", "12px")
-            .attr("text-anchor", "middle")
-            .text("GHG Intensity (kg CO2e / sq ft)");
+            .select(".domain").remove();
 
-        // 5. Add Reference Lines (Mean)
-        const meanX = x(ghgIntensityStats.mean);
+        // Indicator Logic
+        const cx = x(Math.min(currentIntensity, domainMax));
+        const cColor = getColor(currentIntensity);
+
+        // 4. Needle (Centered on the bar)
         svg.append("line")
-            .attr("x1", meanX)
-            .attr("x2", meanX)
-            .attr("y1", 0)
-            .attr("y2", height)
-            .attr("stroke", "#374151")
-            .attr("stroke-dasharray", "4")
-            .attr("stroke-width", 1);
-        
-        // Mean label (Adjusted Y position to fit in the new margin)
+            .attr("x1", cx).attr("x2", cx)
+            .attr("y1", barY - 2).attr("y2", barY + barHeight + 2)
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 2)
+            .attr("filter", "drop-shadow(0 0 1px black)");
+
+        // 5. Value Text (Aligned to the right, vertically centered with title)
         svg.append("text")
-            .attr("x", meanX)
-            .attr("y", -5)
-            .attr("text-anchor", "middle")
-            .attr("font-size", "10px")
-            .text(`Avg: ${ghgIntensityStats.mean.toFixed(1)}`);
-
-
-        // 6. Draw the Indicator (Needle) for the current building
-        const indicatorX = x(Math.min(currentIntensity, domainMax));
-        const indicatorColor = getColor(currentIntensity);
-        const indicatorValueText = currentIntensity.toFixed(1);
-
-        // Vertical Line/Needle
-        svg.append("line")
-            .attr("x1", indicatorX)
-            .attr("x2", indicatorX)
-            .attr("y1", -5) // Start line lower
-            .attr("y2", height + 5)
-            .attr("stroke", indicatorColor)
-            .attr("stroke-width", 3);
-
-        // Value Label (Adjusted Y position to fit in the new margin)
-        svg.append("text")
-            .attr("x", indicatorX)
-            .attr("y", -10) // Moved down significantly
-            .attr("text-anchor", indicatorX < width * 0.1 ? "start" : (indicatorX > width * 0.9 ? "end" : "middle"))
-            .attr("fill", indicatorColor)
+            .attr("x", width)
+            .attr("y", 5) // Aligned with the top area
+            .attr("text-anchor", "end")
+            .attr("fill", cColor)
             .attr("font-weight", "bold")
-            .attr("font-size", "14px")
-            .text(`This Building: ${indicatorValueText}`);
-
-        // Note if the value is capped
-        if (currentIntensity > domainMax) {
-             svg.append("text")
-                .attr("x", x(domainMax))
-                .attr("y", -5)
-                .attr("text-anchor", "end")
-                .attr("fill", indicatorColor)
-                .attr("font-size", "10px")
-                .text(`(${indicatorValueText} is above scale cap)`);
-        }
+            .attr("font-size", "18px") // Larger font for readability
+            .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)")
+            .text(currentIntensity.toFixed(1));
     }
 
-    // --- Camera Initialization ---
-    function initializeCamera() {
-        const cameraConstraints = { video: { facingMode: 'environment' } };
-        
-        // Check for media device support and request camera access
-        navigator.mediaDevices.getUserMedia(cameraConstraints)
-            .then((stream) => {
-                video.srcObject = stream;
-            })
-            .catch((err) => {
-                console.error("Error accessing the camera: " + err);
-            });
-    }
-    initializeCamera();
+    // --- 4. Utility Functions ---
 
-    // --- Leaflet Map Initialization ---
-    function initializeMap() {
-        map = L.map('map').setView([0, 0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-        markersLayer = L.layerGroup().addTo(map);
-    }
-    initializeMap();
-
-    // --- Map Helper Functions (omitted for brevity, assume they are correct) ---
-
-    function clearMarkers() {
-        markersLayer.clearLayers();
-        buildingMarkersMap.clear();
+    function toSlug(text) {
+        if (!text) return '';
+        return String(text).toLowerCase().trim()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/[\s-]+/g, '-');
     }
 
-    function addLocationMarker(lat, lon, isAccurate) {
-        const style = { ...USER_MARKER_STYLE };
-        style.color = isAccurate ? '#1d4ed8' : '#6b7280';
-        style.fillColor = style.color;
-
-        const marker = L.circleMarker([lat, lon], style).addTo(markersLayer);
-        marker.bindPopup(isAccurate ? "Your GPS Location" : "Your IP (Approximate) Location");
-        return marker;
-    }
-
-    function highlightSelectedMarker(selectedMarkerKey) {
-        buildingMarkersMap.forEach((marker, key) => {
-            marker.setStyle(BUILDING_DEFAULT_STYLE);
-        });
-
-        const selectedMarker = buildingMarkersMap.get(selectedMarkerKey);
-        if (selectedMarker) {
-            selectedMarker.setStyle(BUILDING_HIGHLIGHT_STYLE);
-            selectedMarker.openPopup();
-        }
-    }
-
-    function addBuildingMarker(entry) {
-        const entryLat = parseFloat(entry.Latitude);
-        const entryLon = parseFloat(entry.Longitude);
-        const identifier = entry['Building ID'] || entry['Building Name'] || 'Building';
-        const distanceKm = entry.distance ? entry.distance.toFixed(2) : 'N/A';
-
-        const marker = L.circleMarker([entryLat, entryLon], BUILDING_DEFAULT_STYLE).addTo(markersLayer);
-        marker.bindPopup(`<b>${identifier}</b><br>Distance: ${distanceKm} km`);
-
-        const markerKey = JSON.stringify({ lat: entryLat, lon: entryLon, id: entry['Building ID'] });
-        buildingMarkersMap.set(markerKey, marker);
-
-        marker.on('click', () => {
-            const entryJson = JSON.stringify(entry);
-            closestSelect.value = entryJson;
-            displayEntryDetails(entry);
-            highlightSelectedMarker(markerKey);
-        });
-        
-        return marker;
-    }
-
-    // Haversine formula (omitted for brevity)
     function calculateDistance(lat1, lon1, lat2, lon2) {
         const R = 6371;
         const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -390,218 +399,155 @@
         const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                   Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
                   Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    // --- Utility Function: Slug Generator (New) ---
-    function toSlug(text) {
-        if (!text) return ''; // Handle null or empty input
-        return String(text)
-            .toLowerCase()             // 1. Convert to lowercase
-            .trim()                    // 2. Remove leading/trailing whitespace
-            .replace(/[^a-z0-9\s-]/g, '') // 3. Remove all non-alphanumeric, non-space, non-hyphen chars
-            .replace(/[\s-]+/g, '-');  // 4. Replace any sequence of space/hyphen with a single hyphen
+    // --- 5. Map & Data Logic ---
+
+    function initializeMap() {
+        // Removed { zoomControl: false } to restore default Top-Left position
+        map = L.map('map').setView([41.8781, -87.6298], 13); 
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(map);
+        
+        markersLayer = L.layerGroup().addTo(map);
     }
+    initializeMap();
 
-    // --- Display Logic (The crucial part of this step) ---
+    function updateUI(entry) {
+        loadingIndicator.style.display = 'none';
 
-    function displayEntryDetails(entry) {
-        let outputText = "";
-
-        // Update the grade overlay text
-        const grade = entry.AvgPercentileLetterGrade || 'N/A';
-        gradeOverlay.textContent = `Grade: ${grade}`; 
-
-        // RENDER WIDGET: Extract intensity and render the bar
-        const ghgIntensity = parseFloat(entry.GHGIntensity);
-        renderIntensityWidget(ghgIntensity);
- 
-        // Generate the building data text
-        for (const key in entry) {
-            if (Object.prototype.hasOwnProperty.call(entry, key)) {
-                if (key !== 'distance') {
-                    outputText += `${key}: ${entry[key]}\n`;
-                }
-            }
-        }
- 
-        csvOutput.textContent = outputText; // Display the data
-        externalLinkContainer.innerHTML = ''; // Clear previous link
-
-        // Generate the required link
+        // Update Top Link
         if (entry.PropertyName) {
-            const baseURL = "https://electrifychicago.net/building/";
- 
-            // 1. Normalize the property name using the new utility function
-            const normalizedName = toSlug(entry.PropertyName);
+            const slug = toSlug(entry.PropertyName);
+            buildingLink.textContent = entry.PropertyName;
+            buildingLink.href = `https://electrifychicago.net/building/${slug}`;
+            buildingLink.style.pointerEvents = 'auto';
+            buildingLink.style.opacity = '1';
+        } else {
+            buildingLink.textContent = "Unknown Building";
+            buildingLink.style.pointerEvents = 'none';
+            buildingLink.style.opacity = '0.7';
+        }
 
-            const finalURL = baseURL + normalizedName;
-
-            // 2. Create and append the link element
-            const linkElement = document.createElement('a');
-            linkElement.href = finalURL;
-            linkElement.target = '_blank';
-            linkElement.textContent = `View Building Details: ${entry.PropertyName}`;
- 
-            externalLinkContainer.appendChild(linkElement);
- 
-        } 
-        // If PropertyName is missing, the container remains empty
+        // Update Widget
+        const intensity = parseFloat(entry.GHGIntensity);
+        renderIntensityWidget(intensity);
     }
-    
-    // --- populateClosestSelector (omitted for brevity, assume it is correct) ---
-    function populateClosestSelector(userLat, userLon, isAccurate) {
-        clearMarkers();
-        const userMarker = addLocationMarker(userLat, userLon, isAccurate);
 
-        if (!allCsvData.length) {
-            closestSelect.innerHTML = '<option value="">CSV data not loaded.</option>';
-            map.setView([userLat, userLon], 10);
-            return;
-        }
-        
-        const entriesWithDistance = allCsvData
-            .map(entry => {
-                const entryLat = parseFloat(entry.Latitude);
-                const entryLon = parseFloat(entry.Longitude);
-                if (isNaN(entryLat) || isNaN(entryLon)) { return null; }
-                return { ...entry, distance: calculateDistance(userLat, userLon, entryLat, entryLon) };
-            })
-            .filter(entry => entry !== null);
+    function populateMap(userLat, userLon) {
+        markersLayer.clearLayers();
+        buildingMarkersMap.clear();
 
-        entriesWithDistance.sort((a, b) => a.distance - b.distance);
-        const closestEntries = entriesWithDistance.slice(0, N_CLOSEST);
-        
-        closestSelect.innerHTML = '';
-        closestSelect.disabled = false;
-        
-        if (closestEntries.length === 0) {
-            closestSelect.innerHTML = '<option value="">No buildings found with coordinates.</option>';
-            closestSelect.disabled = true;
-            map.setView([userLat, userLon], 10);
-            return;
-        }
+        // User Location Marker (Blue)
+        L.circleMarker([userLat, userLon], { 
+            radius: 8, color: '#ffffff', weight: 2, fillColor: '#2563eb', fillOpacity: 1 
+        }).addTo(markersLayer).bindPopup("Your Location");
 
-        closestSelect.innerHTML += `<option value="" disabled selected>Select one of the ${closestEntries.length} closest entries:</option>`;
-        
+        if (!allCsvData.length) return;
+
+        // Process ALL buildings
+        // We calc distance just to find the closest one for initial selection, 
+        // but we render all of them.
+        let closestEntry = null;
+        let minDistance = Infinity;
+
         const bounds = new L.LatLngBounds();
-        bounds.extend(userMarker.getLatLng());
-        let firstEntryKey = null;
+        bounds.extend([userLat, userLon]);
 
-        closestEntries.forEach((entry, index) => {
-            const distanceText = entry.distance.toFixed(2);
-            const entryIdentifier = entry['Building ID'] || entry['Building Name'] || `Entry ${index + 1}`; 
-            const option = document.createElement('option');
+        allCsvData.forEach((entry, index) => {
+            const lat = parseFloat(entry.Latitude);
+            const lon = parseFloat(entry.Longitude);
             
-            const entryJson = JSON.stringify(entry);
-            option.value = entryJson;
-            option.textContent = `${entryIdentifier} (${distanceText} km)`;
-            closestSelect.appendChild(option);
-            
-            const buildingMarker = addBuildingMarker(entry);
-            bounds.extend(buildingMarker.getLatLng());
+            if (isNaN(lat) || isNaN(lon)) return;
 
-            if (index === 0) {
-                const entryLat = parseFloat(entry.Latitude);
-                const entryLon = parseFloat(entry.Longitude);
-                firstEntryKey = JSON.stringify({ lat: entryLat, lon: entryLon, id: entry['Building ID'] });
+            const dist = calculateDistance(userLat, userLon, lat, lon);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestEntry = entry;
             }
+
+            // Color Coding
+            const intensity = parseFloat(entry.GHGIntensity);
+            const color = getColor(intensity);
+
+            const marker = L.circleMarker([lat, lon], {
+                radius: 5, // Smaller radius for density
+                weight: 1,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.8
+            }).addTo(markersLayer);
+
+            // Interaction
+            marker.on('click', () => {
+                // Reset previous highlight (simplistic approach: reset all is too slow, 
+                // in a real app we'd track the 'selected' marker)
+                
+                // Just Set UI
+                updateUI(entry);
+                
+                // Visual feedback
+                marker.bringToFront();
+                marker.setStyle({ radius: 10, weight: 2, color: '#fff' });
+                setTimeout(() => { marker.setStyle({ radius: 5, weight: 1, color: color }); }, 2000);
+            });
+
+            bounds.extend([lat, lon]);
         });
 
-        map.fitBounds(bounds, { padding: [50, 50] });
-
-        closestSelect.onchange = function() {
-            if (this.value) {
-                const selectedEntry = JSON.parse(this.value);
-                displayEntryDetails(selectedEntry);
-
-                const selectedKey = JSON.stringify({ 
-                    lat: parseFloat(selectedEntry.Latitude), 
-                    lon: parseFloat(selectedEntry.Longitude), 
-                    id: selectedEntry['Building ID'] 
-                });
-                highlightSelectedMarker(selectedKey);
-            }
-        };
-
-        if (closestEntries.length > 0) {
-            closestSelect.selectedIndex = 1;
-            displayEntryDetails(closestEntries[0]);
-            if (firstEntryKey) { highlightSelectedMarker(firstEntryKey); }
+        // Auto-select closest
+        if (closestEntry) {
+            updateUI(closestEntry);
         }
+        
+        // Initial zoom to fit user + immediate surroundings (not necessarily all bounds)
+        map.setView([userLat, userLon], 15);
     }
 
+    // --- 6. Initialization Flow ---
 
-    // --- Flow Control (omitted for brevity, assume it is correct) ---
     function loadCsvData() {
-        Papa.parse(csvFilePath, {
+        Papa.parse(CSV_FILE_PATH, {
             download: true, header: true, dynamicTyping: true,
             complete: function(results) {
-                allCsvData = results.data.filter(d => d.Latitude !== null && d.Longitude !== null && !isNaN(parseFloat(d.Latitude))); 
-                calculateGhgStats(allCsvData); 
-                if (allCsvData.length === 0) { csvOutput.textContent = "CSV loaded, but no valid data entries with Latitude/Longitude were found."; } 
-                else { csvOutput.textContent = "CSV data loaded. Fetching location to determine closest entries..."; }
+                allCsvData = results.data.filter(d => d.Latitude && !isNaN(parseFloat(d.Latitude)));
+                calculateGhgStats(allCsvData);
                 getGeolocation();
             },
-            error: function(err) {
-                console.error("Error fetching or parsing CSV:", err);
-                csvOutput.textContent = "Error fetching 'building-benchmarks.csv'. Check console.";
-                getGeolocation();
+            error: (err) => {
+                console.error("CSV Error:", err);
+                loadingIndicator.textContent = "Error loading data";
             }
-        });
-    }
-
-    function fallbackToIPLocation(geoError) {
-      geoOutput.textContent = `Geolocation failed (${geoError.message}). Falling back to IP-based location...`;
-
-      fetch(IPLOCATE_API)
-        .then(response => response.ok ? response.json() : Promise.reject(`Status: ${response.status}`))
-        .then(data => {
-          if (data.latitude && data.longitude) {
-            geoOutput.textContent = 
-              `Source: IP Lookup (Approximate)\nLatitude: ${data.latitude}\nLongitude: ${data.longitude}\nCity: ${data.city || 'N/A'}\nCountry: ${data.country || 'N/A'}`;
-            populateClosestSelector(data.latitude, data.longitude, false);
-          } else { geoOutput.textContent = "IP Location: Latitude/Longitude not found in response."; }
-        })
-        .catch(fetchError => {
-          geoOutput.textContent = `Error fetching IP location: ${fetchError.message}`;
-          console.error("Error fetching IP location:", fetchError);
         });
     }
 
     function getGeolocation() {
-      if (navigator.geolocation) {
-        const geoOptions = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 };
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            const accuracy = position.coords.accuracy;
-            geoOutput.textContent = 
-              `Source: Device GPS/Location Service\nLatitude: ${lat}\nLongitude: ${lon}\nAccuracy: ${accuracy} meters`;
-            populateClosestSelector(lat, lon, true);
-          },
-          (error) => {
-            let userMessage = "";
-            switch(error.code) {
-              case error.PERMISSION_DENIED: userMessage = "Permission Denied"; break;
-              case error.TIMEOUT: userMessage = "Request Timed Out"; break;
-              default: userMessage = "Location Unavailable";
-            }
-            fallbackToIPLocation(new Error(userMessage));
-          },
-          geoOptions
-        );
-      } else {
-        fallbackToIPLocation(new Error("Geolocation not supported by browser."));
-      }
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => populateMap(pos.coords.latitude, pos.coords.longitude),
+                (err) => fallbackToIP()
+            );
+        } else {
+            fallbackToIP();
+        }
     }
 
+    function fallbackToIP() {
+        fetch(IPLOCATE_API)
+            .then(res => res.json())
+            .then(data => {
+                if(data.latitude) populateMap(data.latitude, data.longitude);
+            })
+            .catch(err => console.error("IP Geo Error", err));
+    }
 
-    // Start the process
-    loadCsvData(); 
+    // Start Application
+    loadCsvData();
+
     </script>
-
-  </body>
+</body>
 </html>
