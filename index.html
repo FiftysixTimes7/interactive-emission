@@ -37,16 +37,27 @@
             left: 0;
             width: 100%;
             height: 100%;
+            transition: opacity 0.3s ease;
+        }
+
+        /* Fallback Image Layer (Demo Mode) */
+        #camera-fallback {
+            background-image: url('https://upload.wikimedia.org/wikipedia/commons/7/7d/Sears_Tower%2C_Wacker_Drive_and_Jackson_Boulevard%2C_Chicago%2C_IL_-_54189600901.jpg');
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
+            z-index: 1;
+            filter: brightness(0.7); 
         }
 
         #video {
             object-fit: cover;
-            z-index: 1;
-            background: #111;
+            z-index: 2;
+            background: transparent;
         }
 
         #map {
-            z-index: 2;
+            z-index: 3;
             background: #eee;
         }
 
@@ -59,79 +70,138 @@
         .active-layer {
             opacity: 1;
             pointer-events: auto;
-            z-index: 2 !important;
         }
+        
+        #camera-fallback.active-layer { z-index: 1 !important; }
+        #video.active-layer { z-index: 2 !important; }
+        #map.active-layer { z-index: 3 !important; }
 
         /* --- UI Overlays --- */
         
-        /* Top Bar: Centered to avoid map controls */
+        /* Top Bar */
         #top-overlay {
             position: absolute;
-            top: 15px;
+            top: 20px;
             left: 50%;
-            transform: translateX(-50%); /* Center horizontally */
+            transform: translateX(-50%);
             width: auto;
-            max-width: 60%; /* Prevent it from hitting the sides */
+            max-width: 60%;
             z-index: 20;
             display: flex;
             justify-content: center;
         }
 
         #building-link {
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.85);
             color: #fff;
-            padding: 8px 16px;
-            border-radius: 20px;
+            padding: 10px 20px;
+            border-radius: 30px;
             text-decoration: none;
-            font-size: 0.9rem; /* Smaller font */
-            font-weight: 500;
-            
-            /* Text Truncation logic */
+            font-size: 1rem;
+            font-weight: 600;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             display: block;
-            max-width: 100%;
-            
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
             border: 1px solid rgba(255,255,255,0.2);
-            transition: background-color 0.2s, border-color 0.2s;
+            backdrop-filter: blur(4px);
+            transition: all 0.2s;
         }
 
         #building-link:hover {
             border-color: #10b981;
+            transform: translateY(-2px);
         }
 
         /* Toggle Button (Top Right) */
         #view-toggle-btn {
             position: absolute;
-            top: 15px;
-            right: 15px;
+            top: 20px;
+            right: 20px;
             z-index: 21;
-            width: 44px;
-            height: 44px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             border: none;
             background-color: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 24px;
+            transition: transform 0.1s;
         }
+        #view-toggle-btn:active { transform: scale(0.95); }
         
-        /* Compact Bottom Widget */
-        #ghg-intensity-widget {
+        /* Bottom Info Card */
+        #info-card {
             position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 60px; /* Reduced from 80px for a tighter look */
-            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%); /* Smoother fade */
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            color: white;
             z-index: 20;
-            padding-bottom: 10px; /* Safe area for bottom of screen */
-            pointer-events: none; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            transform: translateY(150%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #info-card.visible {
+            transform: translateY(0);
+        }
+
+        .info-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+
+        .info-main {
+            font-size: 1.1rem;
+            line-height: 1.4;
+            font-weight: 400;
+        }
+
+        .highlight-text {
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* Map Legend (Top Left, below zoom) */
+        #map-legend {
+            position: absolute;
+            top: 90px; /* Positioned below standard Leaflet zoom controls */
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 25;
+            font-size: 12px;
+            display: none; 
+            color: #333;
+            width: 120px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            flex-shrink: 0;
         }
 
         #loading-indicator {
@@ -142,23 +212,26 @@
             color: white;
             z-index: 30;
             text-align: center;
-            pointer-events: none;
-            background: rgba(0,0,0,0.6);
-            padding: 10px 20px;
-            border-radius: 8px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px 25px;
+            border-radius: 12px;
+            backdrop-filter: blur(5px);
         }
     </style>
 </head>
 <body>
 
     <div id="app-container">
-        <!-- View 1: Camera -->
-        <video id="video" class="view-layer active-layer" autoplay playsinline muted></video>
+        <!-- View 1: Fallback Image (Demo Mode) -->
+        <div id="camera-fallback" class="view-layer hidden-layer"></div>
 
-        <!-- View 2: Map -->
+        <!-- View 2: Camera Stream -->
+        <video id="video" class="view-layer hidden-layer" autoplay playsinline muted></video>
+
+        <!-- View 3: Map -->
         <div id="map" class="view-layer hidden-layer"></div>
 
-        <!-- UI: Top Overlay (Centered) -->
+        <!-- UI: Top Overlay -->
         <div id="top-overlay">
             <a id="building-link" href="#" target="_blank">Locating...</a>
         </div>
@@ -166,8 +239,22 @@
         <!-- UI: View Toggle -->
         <button id="view-toggle-btn" title="Toggle Camera/Map">🗺️</button>
 
-        <!-- UI: Bottom Widget -->
-        <div id="ghg-intensity-widget"></div>
+        <!-- UI: Bottom Info Card -->
+        <div id="info-card">
+            <div class="info-title">Building Performance</div>
+            <div id="info-content" class="info-main">
+                Select a building to see analysis.
+            </div>
+        </div>
+
+        <!-- Map Legend -->
+        <div id="map-legend">
+            <div style="font-weight:bold; margin-bottom:5px;">GHG Intensity</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Top (A)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div>Avg (B)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div>Below Avg (C)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Poor (D)</div>
+        </div>
 
         <!-- Loading Status -->
         <div id="loading-indicator">Loading Data...</div>
@@ -176,10 +263,13 @@
     <script>
     // --- DOM Elements ---
     const videoElement = document.getElementById('video');
+    const fallbackElement = document.getElementById('camera-fallback');
     const mapElement = document.getElementById('map');
     const buildingLink = document.getElementById('building-link');
     const toggleBtn = document.getElementById('view-toggle-btn');
-    const widgetContainer = document.getElementById('ghg-intensity-widget');
+    const infoCard = document.getElementById('info-card');
+    const infoContent = document.getElementById('info-content');
+    const mapLegend = document.getElementById('map-legend');
     const loadingIndicator = document.getElementById('loading-indicator');
 
     // --- Constants & State ---
@@ -187,58 +277,67 @@
     const IPLOCATE_API = 'https://iplocate.io/api/lookup'; 
     
     let allCsvData = [];
+    let sortedIntensities = []; 
     let map;
     let markersLayer;
-    // Storing references to markers to highlight them later
-    const buildingMarkersMap = new Map();
     let ghgIntensityStats = {};
-
-    let selectedEntry = null; // Store the current building so we can re-draw on resize
+    let selectedEntry = null;
     
     // View State
     let isCameraMode = true;
     let cameraStream = null;
+    let isCameraSupported = true;
 
-    // --- 1. View Controller & Battery Saving Logic ---
+    // --- 1. View Controller ---
 
     function toggleView() {
         if (isCameraMode) {
             activateMap();
         } else {
-            activateCamera();
+            activateCameraMode();
         }
     }
 
     function activateMap() {
         isCameraMode = false;
-        // UI Updates
-        videoElement.classList.replace('active-layer', 'hidden-layer');
-        mapElement.classList.replace('hidden-layer', 'active-layer');
-        toggleBtn.textContent = "📷"; 
         
-        // Stop Camera to save battery
+        videoElement.classList.remove('active-layer');
+        videoElement.classList.add('hidden-layer');
+        fallbackElement.classList.remove('active-layer');
+        fallbackElement.classList.add('hidden-layer');
+        
+        mapElement.classList.remove('hidden-layer');
+        mapElement.classList.add('active-layer');
+        
+        toggleBtn.textContent = "📷"; 
+        mapLegend.style.display = 'block'; 
+
         if (cameraStream) {
-            cameraStream.getTracks().forEach(track => track.stop());
-            cameraStream = null;
+            videoElement.pause();
         }
 
-        // Refresh map layout
         setTimeout(() => { map.invalidateSize(); }, 300);
     }
 
-    async function activateCamera() {
-        // Start Camera
-        const success = await startCameraStream();
+    async function activateCameraMode() {
+        isCameraMode = true;
         
-        if (success) {
-            isCameraMode = true;
-            // UI Updates
-            mapElement.classList.replace('active-layer', 'hidden-layer');
-            videoElement.classList.replace('hidden-layer', 'active-layer');
-            toggleBtn.textContent = "🗺️";
+        mapElement.classList.remove('active-layer');
+        mapElement.classList.add('hidden-layer');
+        toggleBtn.textContent = "🗺️";
+        mapLegend.style.display = 'none';
+
+        if (isCameraSupported) {
+            if (videoElement.srcObject) {
+                videoElement.play();
+                videoElement.classList.remove('hidden-layer');
+                videoElement.classList.add('active-layer');
+            } else {
+                await startCameraStream();
+            }
         } else {
-            alert("Camera access denied or unavailable.");
-            activateMap();
+            fallbackElement.classList.remove('hidden-layer');
+            fallbackElement.classList.add('active-layer');
         }
     }
 
@@ -249,140 +348,91 @@
             });
             videoElement.srcObject = stream;
             cameraStream = stream;
-            return true;
+            isCameraSupported = true;
+            
+            videoElement.classList.remove('hidden-layer');
+            videoElement.classList.add('active-layer');
+            fallbackElement.classList.add('hidden-layer');
         } catch (err) {
-            console.error("Camera Error:", err);
-            return false;
+            console.warn("Camera access denied or failed. Switching to Demo Mode.", err);
+            isCameraSupported = false;
+            videoElement.classList.add('hidden-layer');
+            fallbackElement.classList.remove('hidden-layer');
+            fallbackElement.classList.add('active-layer');
         }
     }
 
     toggleBtn.addEventListener('click', toggleView);
 
-    // Initial Camera Start
-    startCameraStream().then(success => {
-        if(!success) activateMap();
-    });
+    // Initial Start
+    startCameraStream(); 
 
 
     // --- 2. Data & Statistics Logic ---
 
     function calculateGhgStats(data) {
-        const validIntensities = data
+        sortedIntensities = data
             .map(d => parseFloat(d.GHGIntensity))
-            .filter(v => !isNaN(v) && v > 0);
+            .filter(v => !isNaN(v) && v >= 0)
+            .sort(d3.ascending);
 
-        if (validIntensities.length === 0) return;
+        if (sortedIntensities.length === 0) return;
 
-        const sortedIntensities = [...validIntensities].sort(d3.ascending);
-        
         ghgIntensityStats = {
-            min: 0,
-            max: d3.max(validIntensities),
-            // Grading boundaries (Lower intensity = Better grade)
-            boundaryA: d3.quantile(sortedIntensities, 0.20), 
-            boundaryB: d3.quantile(sortedIntensities, 0.40), 
-            boundaryC: d3.quantile(sortedIntensities, 0.60), 
-            boundaryD: d3.quantile(sortedIntensities, 0.80),
-            visMax: d3.quantile(sortedIntensities, 0.95) || d3.max(validIntensities)
+            boundaryA: d3.quantile(sortedIntensities, 0.25), 
+            boundaryB: d3.quantile(sortedIntensities, 0.50), 
+            boundaryC: d3.quantile(sortedIntensities, 0.75), 
+            max: d3.max(sortedIntensities)
         };
     }
 
     function getColor(value) {
         if (!ghgIntensityStats.max) return '#6b7280';
-        if (value <= ghgIntensityStats.boundaryA) return '#10b981'; // Green
-        if (value <= ghgIntensityStats.boundaryB) return '#facc15'; // Yellow
-        if (value <= ghgIntensityStats.boundaryC) return '#fb923c'; // Orange
-        return '#ef4444'; // Red
+        if (value <= ghgIntensityStats.boundaryA) return '#10b981';
+        if (value <= ghgIntensityStats.boundaryB) return '#facc15';
+        if (value <= ghgIntensityStats.boundaryC) return '#fb923c';
+        return '#ef4444';
     }
 
-    // --- 3. Compact Visualization Widget ---
+    // --- 3. Contextual Text Widget ---
 
-    function renderIntensityWidget(currentIntensity) {
-        const container = d3.select("#ghg-intensity-widget");
-        container.html(""); 
-
-        if (!ghgIntensityStats.max || isNaN(currentIntensity)) {
-            // Adjusted padding for the smaller height
-            container.html("<div style='color:#ccc; font-size:0.8rem; text-align:center; padding-top:25px'>Select a building</div>");
+    function renderInfoCard(entry) {
+        if (!entry) {
+            infoCard.classList.remove('visible');
             return;
         }
 
-        const rect = widgetContainer.getBoundingClientRect();
-        // Tighter margins
-        const margin = { top: 15, right: 15, bottom: 5, left: 15 };
-        const width = rect.width - margin.left - margin.right;
-        const height = rect.height - margin.top - margin.bottom;
-        const domainMax = ghgIntensityStats.visMax;
-
-        const svg = container.append("svg")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
-            .append("g")
-            .attr("transform", `translate(${margin.left},${margin.top})`);
-
-        const x = d3.scaleLinear().domain([0, domainMax]).range([0, width]);
-
-        // Zones
-        const zones = [
-            { start: 0, end: ghgIntensityStats.boundaryA, color: '#10b981' },
-            { start: ghgIntensityStats.boundaryA, end: ghgIntensityStats.boundaryB, color: '#facc15' },
-            { start: ghgIntensityStats.boundaryB, end: ghgIntensityStats.boundaryC, color: '#fb923c' },
-            { start: ghgIntensityStats.boundaryC, end: domainMax, color: '#ef4444' }
-        ];
-
-        // 1. Title (Moved higher up, y=0 relative to margin)
-        svg.append("text")
-            .attr("x", 0)
-            .attr("y", 0)
-            .attr("fill", "#9ca3af")
-            .attr("font-size", "9px") // Slightly smaller
-            .style("text-transform", "uppercase")
-            .text("GHG Intensity (kg CO2e/sq ft)");
-
-        // 2. Color Bar (Moved up to y=8)
-        const barY = 8;
-        const barHeight = 6;
+        const intensity = parseFloat(entry.GHGIntensity);
         
-        svg.selectAll(".zone")
-            .data(zones)
-            .enter().append("rect")
-            .attr("x", d => x(d.start))
-            .attr("y", barY) 
-            .attr("width", d => Math.max(0, x(Math.min(d.end, domainMax)) - x(d.start)))
-            .attr("height", barHeight)
-            .attr("fill", d => d.color)
-            .attr("opacity", 0.6)
-            .attr("rx", 2);
+        if (isNaN(intensity) || sortedIntensities.length === 0) {
+            infoContent.innerHTML = "Data unavailable for this building.";
+            infoCard.classList.add('visible');
+            return;
+        }
 
-        // 3. Ticks (Just small lines below bar)
-        const xAxis = d3.axisBottom(x).ticks(5).tickSize(3).tickFormat("");
-        svg.append("g")
-            .attr("transform", `translate(0, ${barY + barHeight})`)
-            .call(xAxis)
-            .select(".domain").remove();
+        const rankIndex = sortedIntensities.findIndex(v => v >= intensity);
+        const total = sortedIntensities.length;
+        const betterThanCount = total - rankIndex;
+        const percentBetter = Math.floor((betterThanCount / total) * 100);
 
-        // Indicator Logic
-        const cx = x(Math.min(currentIntensity, domainMax));
-        const cColor = getColor(currentIntensity);
+        let rating = "";
+        let colorClass = "";
+        if (intensity <= ghgIntensityStats.boundaryA) { rating = "Excellent"; colorClass = "#10b981"; }
+        else if (intensity <= ghgIntensityStats.boundaryB) { rating = "Average"; colorClass = "#facc15"; }
+        else if (intensity <= ghgIntensityStats.boundaryC) { rating = "Below Average"; colorClass = "#fb923c"; }
+        else { rating = "High Emitter"; colorClass = "#ef4444"; }
 
-        // 4. Needle (Centered on the bar)
-        svg.append("line")
-            .attr("x1", cx).attr("x2", cx)
-            .attr("y1", barY - 2).attr("y2", barY + barHeight + 2)
-            .attr("stroke", "#fff")
-            .attr("stroke-width", 2)
-            .attr("filter", "drop-shadow(0 0 1px black)");
-
-        // 5. Value Text (Aligned to the right, vertically centered with title)
-        svg.append("text")
-            .attr("x", width)
-            .attr("y", 0) // Aligned with the top area
-            .attr("text-anchor", "end")
-            .attr("fill", cColor)
-            .attr("font-weight", "bold")
-            .attr("font-size", "18px") // Larger font for readability
-            .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)")
-            .text(currentIntensity.toFixed(1));
+        infoContent.innerHTML = `
+            <div style="margin-bottom:6px;">
+                Emission Rating: <span style="color:${colorClass}; font-weight:800;">${rating}</span>
+            </div>
+            <div>
+                This building emits <span class="highlight-text">${intensity.toFixed(1)}</span> kg CO2e/sq ft. 
+                It performs better than <span class="highlight-text">${percentBetter}%</span> of tracked buildings.
+            </div>
+        `;
+        
+        infoCard.classList.add('visible');
     }
 
     // --- 4. Utility Functions ---
@@ -407,9 +457,12 @@
     // --- 5. Map & Data Logic ---
 
     function initializeMap() {
-        // Removed { zoomControl: false } to restore default Top-Left position
-        map = L.map('map').setView([41.8781, -87.6298], 13); 
+        // Initialize with Zoom Control disabled initially so we can add it manually to TopLeft
+        map = L.map('map', { zoomControl: false }).setView([41.8781, -87.6298], 13); 
         
+        // Add Zoom Control to Top Left
+        L.control.zoom({ position: 'topleft' }).addTo(map);
+
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -421,10 +474,8 @@
 
     function updateUI(entry) {
         selectedEntry = entry;
-
         loadingIndicator.style.display = 'none';
 
-        // Update Top Link
         if (entry.PropertyName) {
             const slug = toSlug(entry.PropertyName);
             buildingLink.textContent = entry.PropertyName;
@@ -437,32 +488,25 @@
             buildingLink.style.opacity = '0.7';
         }
 
-        // Update Widget
-        const intensity = parseFloat(entry.GHGIntensity);
-        renderIntensityWidget(intensity);
+        renderInfoCard(entry);
     }
 
     function populateMap(userLat, userLon) {
         markersLayer.clearLayers();
-        buildingMarkersMap.clear();
 
-        // User Location Marker (Blue)
+        // User Location Marker
         L.circleMarker([userLat, userLon], { 
-            radius: 8, color: '#ffffff', weight: 2, fillColor: '#2563eb', fillOpacity: 1 
+            radius: 8, color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 
         }).addTo(markersLayer).bindPopup("Your Location");
 
         if (!allCsvData.length) return;
 
-        // Process ALL buildings
-        // We calc distance just to find the closest one for initial selection, 
-        // but we render all of them.
         let closestEntry = null;
         let minDistance = Infinity;
-
         const bounds = new L.LatLngBounds();
         bounds.extend([userLat, userLon]);
 
-        allCsvData.forEach((entry, index) => {
+        allCsvData.forEach((entry) => {
             const lat = parseFloat(entry.Latitude);
             const lon = parseFloat(entry.Longitude);
             
@@ -474,42 +518,32 @@
                 closestEntry = entry;
             }
 
-            // Color Coding
             const intensity = parseFloat(entry.GHGIntensity);
             const color = getColor(intensity);
 
             const marker = L.circleMarker([lat, lon], {
-                radius: 5, // Smaller radius for density
+                radius: 6, 
                 weight: 1,
-                color: color,
+                color: '#fff',
                 fillColor: color,
-                fillOpacity: 0.8
+                fillOpacity: 0.85
             }).addTo(markersLayer);
 
-            // Interaction
             marker.on('click', () => {
-                // Reset previous highlight (simplistic approach: reset all is too slow, 
-                // in a real app we'd track the 'selected' marker)
-                
-                // Just Set UI
                 updateUI(entry);
-                
-                // Visual feedback
                 marker.bringToFront();
-                marker.setStyle({ radius: 10, weight: 2, color: '#fff' });
-                setTimeout(() => { marker.setStyle({ radius: 5, weight: 1, color: color }); }, 2000);
+                marker.setStyle({ radius: 10, weight: 3, color: '#000' });
+                setTimeout(() => { marker.setStyle({ radius: 6, weight: 1, color: '#fff' }); }, 1500);
             });
 
             bounds.extend([lat, lon]);
         });
 
-        // Auto-select closest
         if (closestEntry) {
             updateUI(closestEntry);
         }
         
-        // Initial zoom to fit user + immediate surroundings (not necessarily all bounds)
-        map.setView([userLat, userLon], 15);
+        map.setView([userLat, userLon], 16);
     }
 
     // --- 6. Initialization Flow ---
@@ -546,20 +580,12 @@
             .then(data => {
                 if(data.latitude) populateMap(data.latitude, data.longitude);
             })
-            .catch(err => console.error("IP Geo Error", err));
+            .catch(err => {
+                console.error("IP Geo Error", err);
+                populateMap(41.8781, -87.6298);
+            });
     }
 
-    // --- Window Resize Handler ---
-    window.addEventListener('resize', () => {
-        if (selectedEntry) {
-            // If we have a building selected, re-draw the widget 
-            // to fit the new screen width
-            const intensity = parseFloat(selectedEntry.GHGIntensity);
-            renderIntensityWidget(intensity);
-        }
-    });
-
-    // Start Application
     loadCsvData();
 
     </script>
