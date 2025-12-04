@@ -24,73 +24,114 @@
             overflow: hidden;
         }
 
-        /* --- Layers --- */
         #app-container {
             position: relative;
             width: 100%;
             height: 100%;
         }
 
-        .view-layer {
+        /* --- Z-INDEX LAYERING STRATEGY ---
+           1. Base: Camera or Fallback Image
+           2. Effects: Smog & Vignette (Must be transparent to clicks)
+           3. Map: Covers everything when active
+           4. UI: Buttons, cards, overlays
+        */
+
+        .layer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.3s ease; /* Faster transition */
         }
 
-        /* Fallback Image Layer (Demo Mode) */
+        /* LAYER 1: CONTENT (Z-Index 1) */
         #camera-fallback {
             background-image: url('https://upload.wikimedia.org/wikipedia/commons/7/7d/Sears_Tower%2C_Wacker_Drive_and_Jackson_Boulevard%2C_Chicago%2C_IL_-_54189600901.jpg');
             background-position: center;
             background-size: cover;
             background-repeat: no-repeat;
             z-index: 1;
-            filter: brightness(0.7); 
         }
-
         #video {
             object-fit: cover;
-            z-index: 2;
-            background: transparent;
+            z-index: 1;
+            background: #000; /* Ensure black background if video fails */
         }
 
+        /* LAYER 2: EFFECTS (Z-Index 10) */
+        /* Note: pointer-events: none is critical so we can interact with things behind if needed */
+        #vignette-layer {
+            z-index: 10;
+            pointer-events: none; 
+            /* No transition on background to prevent "stuck" state */
+        }
+        #cloud-canvas {
+            z-index: 11;
+            pointer-events: none;
+            opacity: 0.9;
+        }
+
+        /* LAYER 3: MAP (Z-Index 20) */
         #map {
-            z-index: 3;
+            z-index: 20;
             background: #eee;
         }
 
-        /* State Classes */
-        .hidden-layer {
-            opacity: 0;
-            pointer-events: none;
-            z-index: 0 !important;
-        }
-        .active-layer {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        
-        #camera-fallback.active-layer { z-index: 1 !important; }
-        #video.active-layer { z-index: 2 !important; }
-        #map.active-layer { z-index: 3 !important; }
-
-        /* --- UI Overlays --- */
-        
-        /* Top Bar */
-        #top-overlay {
+        /* LAYER 4: UI (Z-Index 100) */
+        .ui-element {
+            z-index: 100;
             position: absolute;
+        }
+
+        /* Visibility States */
+        .hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        .visible {
+            opacity: 1 !important;
+        }
+
+
+        /* --- UI STYLES --- */
+
+        /* 1. Effects Toggle (Top Left) */
+        #effect-toggle-btn {
+            top: 20px;
+            left: 20px;
+            padding: 0 16px;
+            height: 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            backdrop-filter: blur(4px);
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        #effect-toggle-btn.active {
+            background-color: #10b981;
+            border-color: #10b981;
+            color: #000;
+        }
+
+        /* 2. Top Label (Top Center) */
+        #top-overlay {
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
             width: auto;
             max-width: 60%;
-            z-index: 20;
             display: flex;
             justify-content: center;
+            pointer-events: none; /* Let clicks pass through around the button */
         }
-
         #building-link {
             background-color: rgba(0, 0, 0, 0.85);
             color: #fff;
@@ -106,20 +147,13 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.4);
             border: 1px solid rgba(255,255,255,0.2);
             backdrop-filter: blur(4px);
-            transition: all 0.2s;
+            pointer-events: auto;
         }
 
-        #building-link:hover {
-            border-color: #10b981;
-            transform: translateY(-2px);
-        }
-
-        /* Toggle Button (Top Right) */
+        /* 3. View Toggle (Top Right) */
         #view-toggle-btn {
-            position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 21;
             width: 48px;
             height: 48px;
             border-radius: 50%;
@@ -131,124 +165,127 @@
             align-items: center;
             justify-content: center;
             font-size: 24px;
-            transition: transform 0.1s;
         }
-        #view-toggle-btn:active { transform: scale(0.95); }
-        
-        /* Bottom Info Card */
+
+        /* 4. Bottom Info Card */
         #info-card {
-            position: absolute;
             bottom: 20px;
             left: 20px;
             right: 20px;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(15, 23, 42, 0.95);
             backdrop-filter: blur(10px);
             border-radius: 16px;
             padding: 20px;
             color: white;
-            z-index: 20;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.1);
             transform: translateY(150%);
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1);
         }
-
-        #info-card.visible {
-            transform: translateY(0);
-        }
+        #info-card.card-active { transform: translateY(0); }
 
         .info-title {
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #9ca3af;
+            color: #94a3b8;
             margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
         }
 
-        .info-main {
-            font-size: 1.1rem;
-            line-height: 1.4;
-            font-weight: 400;
+        .rating-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #000;
+            font-weight: 800;
+            font-size: 0.7rem;
+            /* Removed transition to fix rapid-click color bug */
         }
 
-        .highlight-text {
-            font-weight: 700;
-            color: #fff;
+        .info-main { font-size: 1rem; line-height: 1.5; color: #e2e8f0; }
+        .highlight-val { color: white; font-weight: 700; }
+        
+        .car-comparison {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .car-grid {
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            font-size: 14px;
+            line-height: 1;
+            max-height: 60px;
+            overflow: hidden;
         }
 
-        /* Map Legend (Top Left, below zoom) */
+        /* 5. Map Legend */
         #map-legend {
-            position: absolute;
-            top: 90px; /* Positioned below standard Leaflet zoom controls */
+            top: 90px;
             left: 10px;
             background: white;
             padding: 10px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            z-index: 25;
             font-size: 12px;
             display: none; 
             color: #333;
             width: 120px;
         }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 4px;
-        }
-        .legend-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 8px;
-            flex-shrink: 0;
-        }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
 
+        /* 6. Loading */
         #loading-indicator {
-            position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             color: white;
-            z-index: 30;
-            text-align: center;
             background: rgba(0,0,0,0.7);
             padding: 15px 25px;
             border-radius: 12px;
-            backdrop-filter: blur(5px);
+            display: block; 
         }
     </style>
 </head>
 <body>
 
     <div id="app-container">
-        <!-- View 1: Fallback Image (Demo Mode) -->
-        <div id="camera-fallback" class="view-layer hidden-layer"></div>
+        
+        <!-- LAYER 1: Content -->
+        <div id="camera-fallback" class="layer hidden"></div>
+        <video id="video" class="layer hidden" autoplay playsinline muted></video>
 
-        <!-- View 2: Camera Stream -->
-        <video id="video" class="view-layer hidden-layer" autoplay playsinline muted></video>
+        <!-- LAYER 2: Effects (Always on top of video, below Map) -->
+        <div id="vignette-layer" class="layer hidden"></div>
+        <canvas id="cloud-canvas" class="layer hidden"></canvas>
 
-        <!-- View 3: Map -->
-        <div id="map" class="view-layer hidden-layer"></div>
+        <!-- LAYER 3: Map -->
+        <div id="map" class="layer hidden"></div>
 
-        <!-- UI: Top Overlay -->
-        <div id="top-overlay">
+        <!-- LAYER 4: UI Elements -->
+        <button id="effect-toggle-btn" class="ui-element active">🌫️ Effects: ON</button>
+
+        <div id="top-overlay" class="ui-element">
             <a id="building-link" href="#" target="_blank">Locating...</a>
         </div>
 
-        <!-- UI: View Toggle -->
-        <button id="view-toggle-btn" title="Toggle Camera/Map">🗺️</button>
+        <button id="view-toggle-btn" class="ui-element" title="Toggle Camera/Map">🗺️</button>
 
-        <!-- UI: Bottom Info Card -->
-        <div id="info-card">
-            <div class="info-title">Building Performance</div>
+        <div id="info-card" class="ui-element">
+            <div class="info-title">
+                <span>Building Analysis</span>
+                <span id="rating-badge" class="rating-badge">-</span>
+            </div>
             <div id="info-content" class="info-main">
-                Select a building to see analysis.
+                Select a building.
             </div>
         </div>
 
-        <!-- Map Legend -->
-        <div id="map-legend">
+        <div id="map-legend" class="ui-element">
             <div style="font-weight:bold; margin-bottom:5px;">GHG Intensity</div>
             <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Top (A)</div>
             <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div>Avg (B)</div>
@@ -256,8 +293,7 @@
             <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Poor (D)</div>
         </div>
 
-        <!-- Loading Status -->
-        <div id="loading-indicator">Loading Data...</div>
+        <div id="loading-indicator" class="ui-element">Loading Data...</div>
     </div>
 
     <script>
@@ -265,79 +301,216 @@
     const videoElement = document.getElementById('video');
     const fallbackElement = document.getElementById('camera-fallback');
     const mapElement = document.getElementById('map');
+    
+    // UI
     const buildingLink = document.getElementById('building-link');
     const toggleBtn = document.getElementById('view-toggle-btn');
+    const effectBtn = document.getElementById('effect-toggle-btn');
     const infoCard = document.getElementById('info-card');
     const infoContent = document.getElementById('info-content');
+    const ratingBadge = document.getElementById('rating-badge');
     const mapLegend = document.getElementById('map-legend');
     const loadingIndicator = document.getElementById('loading-indicator');
+    
+    // Effects
+    const vignetteLayer = document.getElementById('vignette-layer');
+    const cloudCanvas = document.getElementById('cloud-canvas');
+    const ctx = cloudCanvas.getContext('2d');
 
-    // --- Constants & State ---
+    // --- State ---
     const CSV_FILE_PATH = 'https://raw.githubusercontent.com/vkoves/electrify-chicago/refs/heads/main/src/data/dist/building-benchmarks.csv'; 
     const IPLOCATE_API = 'https://iplocate.io/api/lookup'; 
     
     let allCsvData = [];
-    let sortedIntensities = []; 
     let map;
     let markersLayer;
     let ghgIntensityStats = {};
-    let selectedEntry = null;
     
-    // View State
     let isCameraMode = true;
     let cameraStream = null;
     let isCameraSupported = true;
 
-    // --- 1. View Controller ---
+    // Visuals State
+    let clouds = [];
+    let currentBuildingIntensity = 5.0; // Default startup intensity (Average)
+    let visualsEnabled = true;
+    let animationFrameId;
+
+    // --- 1. Cloud & Atmosphere Logic ---
+
+    function initClouds() {
+        cloudCanvas.width = window.innerWidth;
+        cloudCanvas.height = window.innerHeight;
+        clouds = [];
+        const numClouds = 25;
+        for (let i = 0; i < numClouds; i++) {
+            clouds.push({
+                x: Math.random() * cloudCanvas.width,
+                y: Math.random() * (cloudCanvas.height * 0.5), 
+                size: 50 + Math.random() * 150,
+                speed: 0.2 + Math.random() * 0.5,
+            });
+        }
+        
+        // Prevent multiple loops
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        animateClouds();
+    }
+
+    function animateClouds() {
+        ctx.clearRect(0, 0, cloudCanvas.width, cloudCanvas.height);
+
+        if (!visualsEnabled) {
+            animationFrameId = requestAnimationFrame(animateClouds);
+            return;
+        }
+
+        // --- VISUAL CALCULATION ---
+        // Max reference set to boundary D (High emitter) + buffer
+        const maxRef = (ghgIntensityStats.boundaryD || 20) * 1.5; 
+        let normalized = currentBuildingIntensity / maxRef;
+        if (normalized > 1) normalized = 1;
+        if (normalized < 0) normalized = 0;
+
+        // Smog Color Logic (White -> Dark Gray)
+        // normalized=0 (Clean) => 255
+        // normalized=1 (Dirty) => 50
+        const grayVal = Math.floor(255 - (normalized * 205)); 
+        const r = grayVal, g = grayVal, b = grayVal;
+
+        clouds.forEach(cloud => {
+            cloud.x += cloud.speed;
+            if (cloud.x - cloud.size > cloudCanvas.width) cloud.x = -cloud.size;
+
+            // Opacity Logic
+            // normalized=0 => 0.05 opacity (barely visible)
+            // normalized=1 => 0.8 opacity (thick smoke)
+            const baseOpacity = 0.05 + (normalized * 0.75); 
+            
+            const gradient = ctx.createRadialGradient(cloud.x, cloud.y, 0, cloud.x, cloud.y, cloud.size);
+            gradient.addColorStop(0, `rgba(${r},${g},${b}, ${baseOpacity})`);
+            gradient.addColorStop(1, `rgba(${r},${g},${b}, 0)`);
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Loop
+        if (isCameraMode) {
+            animationFrameId = requestAnimationFrame(animateClouds);
+        }
+    }
+
+    function applyAtmosphereEffects() {
+        // This function sets the CSS overlay (Vignette)
+        if (!visualsEnabled) {
+            vignetteLayer.style.background = 'none';
+            return;
+        }
+
+        const maxRef = (ghgIntensityStats.boundaryD || 20) * 1.5;
+        let normalized = currentBuildingIntensity / maxRef;
+        if (normalized > 1) normalized = 1;
+
+        if (normalized < 0.2) {
+            // Clean: Very subtle shadow
+            vignetteLayer.style.background = `radial-gradient(circle at center, transparent 60%, rgba(0,0,0,0.2) 100%)`;
+        } else {
+            // Dirty: Stronger, larger dark overlay
+            // Opacity 0.2 to 0.9
+            const opacity = 0.2 + (normalized * 0.7);
+            const startPct = 60 - (normalized * 40); // Circle shrinks as it gets dirtier
+            
+            vignetteLayer.style.background = `radial-gradient(circle at center, transparent ${startPct}%, rgba(20, 15, 10, ${opacity}) 100%)`;
+        }
+    }
+
+    // Toggle Button Logic
+    effectBtn.addEventListener('click', () => {
+        visualsEnabled = !visualsEnabled;
+        
+        if (visualsEnabled) {
+            effectBtn.innerHTML = "🌫️ Effects: ON";
+            effectBtn.classList.add('active');
+            cloudCanvas.classList.remove('hidden');
+            cloudCanvas.classList.add('visible');
+            applyAtmosphereEffects(); // Re-apply current state
+        } else {
+            effectBtn.innerHTML = "🌫️ Effects: OFF";
+            effectBtn.classList.remove('active');
+            cloudCanvas.classList.remove('visible');
+            cloudCanvas.classList.add('hidden');
+            vignetteLayer.style.background = 'none';
+        }
+    });
+
+    // --- 2. View Switching Logic ---
 
     function toggleView() {
         if (isCameraMode) {
-            activateMap();
+            switchToMap();
         } else {
-            activateCameraMode();
+            switchToCamera();
         }
     }
 
-    function activateMap() {
+    function switchToMap() {
         isCameraMode = false;
-        
-        videoElement.classList.remove('active-layer');
-        videoElement.classList.add('hidden-layer');
-        fallbackElement.classList.remove('active-layer');
-        fallbackElement.classList.add('hidden-layer');
-        
-        mapElement.classList.remove('hidden-layer');
-        mapElement.classList.add('active-layer');
-        
+        cancelAnimationFrame(animationFrameId);
+
+        // Hide Layers 1 & 2
+        videoElement.classList.remove('visible'); videoElement.classList.add('hidden');
+        fallbackElement.classList.remove('visible'); fallbackElement.classList.add('hidden');
+        vignetteLayer.classList.remove('visible'); vignetteLayer.classList.add('hidden');
+        cloudCanvas.classList.remove('visible'); cloudCanvas.classList.add('hidden');
+
+        // Hide toggle button
+        effectBtn.style.display = 'none';
+
+        // Show Map (Layer 3)
+        mapElement.classList.remove('hidden');
+        mapElement.classList.add('visible');
+
+        // UI Updates
         toggleBtn.textContent = "📷"; 
-        mapLegend.style.display = 'block'; 
+        mapLegend.style.display = 'block';
 
-        if (cameraStream) {
-            videoElement.pause();
-        }
-
+        if (cameraStream) videoElement.pause();
         setTimeout(() => { map.invalidateSize(); }, 300);
     }
 
-    async function activateCameraMode() {
+    async function switchToCamera() {
         isCameraMode = true;
-        
-        mapElement.classList.remove('active-layer');
-        mapElement.classList.add('hidden-layer');
-        toggleBtn.textContent = "🗺️";
+        initClouds();
+
+        // Hide Map
+        mapElement.classList.remove('visible');
+        mapElement.classList.add('hidden');
+
+        // UI Updates
+        effectBtn.style.display = 'flex';
+        toggleBtn.textContent = "🗺️"; 
         mapLegend.style.display = 'none';
 
+        // Show Effects (Layer 2)
+        vignetteLayer.classList.remove('hidden'); vignetteLayer.classList.add('visible');
+        cloudCanvas.classList.remove('hidden'); cloudCanvas.classList.add('visible');
+        
+        // Re-apply darkening
+        if(visualsEnabled) applyAtmosphereEffects();
+
+        // Show Camera/Fallback (Layer 1)
         if (isCameraSupported) {
             if (videoElement.srcObject) {
                 videoElement.play();
-                videoElement.classList.remove('hidden-layer');
-                videoElement.classList.add('active-layer');
+                videoElement.classList.remove('hidden'); videoElement.classList.add('visible');
             } else {
                 await startCameraStream();
             }
         } else {
-            fallbackElement.classList.remove('hidden-layer');
-            fallbackElement.classList.add('active-layer');
+            fallbackElement.classList.remove('hidden'); fallbackElement.classList.add('visible');
         }
     }
 
@@ -349,40 +522,104 @@
             videoElement.srcObject = stream;
             cameraStream = stream;
             isCameraSupported = true;
-            
-            videoElement.classList.remove('hidden-layer');
-            videoElement.classList.add('active-layer');
-            fallbackElement.classList.add('hidden-layer');
+            videoElement.classList.remove('hidden'); videoElement.classList.add('visible');
+            fallbackElement.classList.remove('visible'); fallbackElement.classList.add('hidden');
         } catch (err) {
-            console.warn("Camera access denied or failed. Switching to Demo Mode.", err);
+            console.warn("Camera failed", err);
             isCameraSupported = false;
-            videoElement.classList.add('hidden-layer');
-            fallbackElement.classList.remove('hidden-layer');
-            fallbackElement.classList.add('active-layer');
+            videoElement.classList.remove('visible'); videoElement.classList.add('hidden');
+            fallbackElement.classList.remove('hidden'); fallbackElement.classList.add('visible');
         }
     }
 
     toggleBtn.addEventListener('click', toggleView);
 
-    // Initial Start
-    startCameraStream(); 
+
+    // --- 3. Info Card & Grading ---
+
+    function renderInfoCard(entry) {
+        if (!entry) {
+            infoCard.classList.remove('card-active');
+            return;
+        }
+
+        const intensity = parseFloat(entry.GHGIntensity);
+        
+        if (isNaN(intensity)) {
+            infoContent.innerHTML = "Data unavailable.";
+            infoCard.classList.add('card-active');
+            return;
+        }
+
+        // 1. Determine Grade & Colors (Synchronous, before visual updates)
+        let rating = "Poor";
+        let color = "#ef4444";
+        let textColor = "white";
+
+        if (ghgIntensityStats.boundaryA) {
+            if (intensity <= ghgIntensityStats.boundaryA) { rating = "A - Excellent"; color = "#10b981"; textColor = "black"; }
+            else if (intensity <= ghgIntensityStats.boundaryB) { rating = "B - Average"; color = "#facc15"; textColor = "black"; }
+            else if (intensity <= ghgIntensityStats.boundaryC) { rating = "C - Below Avg"; color = "#fb923c"; textColor = "black"; }
+            else { rating = "D - Poor"; color = "#ef4444"; textColor = "white"; }
+        }
+
+        // 2. Update Badge Immediately (No Transition)
+        ratingBadge.textContent = rating;
+        ratingBadge.style.backgroundColor = color;
+        ratingBadge.style.color = textColor;
+
+        // 3. Update Visuals
+        currentBuildingIntensity = intensity;
+        applyAtmosphereEffects(); 
+
+        // 4. Calculate Cars
+        const sliceEmissions = intensity * 2000;
+        const carCount = Math.round(sliceEmissions / 4600);
+        let carIcons = "";
+        const maxIcons = 24; 
+        const displayCount = Math.min(carCount, maxIcons);
+        
+        if (carCount < 1) {
+            carIcons = "<span style='font-size:12px; color:#aaa'>(Less than 1 car)</span>";
+        } else {
+            for(let i=0; i<displayCount; i++) carIcons += "🚗 ";
+            if (carCount > maxIcons) {
+                carIcons += `<span style="font-size:12px; color:#aaa; margin-left:4px">+ ${carCount - maxIcons} more</span>`;
+            }
+        }
+
+        infoContent.innerHTML = `
+            <div style="margin-bottom:4px;">
+                Emission Intensity: <span class="highlight-val">${intensity.toFixed(1)}</span> kg CO2e/sq ft
+            </div>
+            <div class="car-comparison">
+                <div style="font-size:0.85rem; color:#cbd5e1; margin-bottom:4px;">
+                    Annual emissions equivalent (per 2,000 sq ft):
+                </div>
+                <div class="car-grid">${carIcons}</div>
+            </div>
+        `;
+        
+        infoCard.classList.add('card-active');
+    }
 
 
-    // --- 2. Data & Statistics Logic ---
+    // --- 4. Data & Map Setup ---
 
     function calculateGhgStats(data) {
-        sortedIntensities = data
+        const sorted = data
             .map(d => parseFloat(d.GHGIntensity))
             .filter(v => !isNaN(v) && v >= 0)
             .sort(d3.ascending);
 
-        if (sortedIntensities.length === 0) return;
+        if (sorted.length === 0) return;
 
         ghgIntensityStats = {
-            boundaryA: d3.quantile(sortedIntensities, 0.25), 
-            boundaryB: d3.quantile(sortedIntensities, 0.50), 
-            boundaryC: d3.quantile(sortedIntensities, 0.75), 
-            max: d3.max(sortedIntensities)
+            boundaryA: d3.quantile(sorted, 0.25), 
+            boundaryB: d3.quantile(sorted, 0.50), 
+            boundaryC: d3.quantile(sorted, 0.75), 
+            boundaryD: d3.quantile(sorted, 0.90),
+            max: d3.max(sorted)
         };
     }
 
@@ -394,107 +631,19 @@
         return '#ef4444';
     }
 
-    // --- 3. Contextual Text Widget ---
-
-    function renderInfoCard(entry) {
-        if (!entry) {
-            infoCard.classList.remove('visible');
-            return;
-        }
-
-        const intensity = parseFloat(entry.GHGIntensity);
-        
-        if (isNaN(intensity) || sortedIntensities.length === 0) {
-            infoContent.innerHTML = "Data unavailable for this building.";
-            infoCard.classList.add('visible');
-            return;
-        }
-
-        const rankIndex = sortedIntensities.findIndex(v => v >= intensity);
-        const total = sortedIntensities.length;
-        const betterThanCount = total - rankIndex;
-        const percentBetter = Math.floor((betterThanCount / total) * 100);
-
-        let rating = "";
-        let colorClass = "";
-        if (intensity <= ghgIntensityStats.boundaryA) { rating = "Excellent"; colorClass = "#10b981"; }
-        else if (intensity <= ghgIntensityStats.boundaryB) { rating = "Average"; colorClass = "#facc15"; }
-        else if (intensity <= ghgIntensityStats.boundaryC) { rating = "Below Average"; colorClass = "#fb923c"; }
-        else { rating = "High Emitter"; colorClass = "#ef4444"; }
-
-        infoContent.innerHTML = `
-            <div style="margin-bottom:6px;">
-                Emission Rating: <span style="color:${colorClass}; font-weight:800;">${rating}</span>
-            </div>
-            <div>
-                This building emits <span class="highlight-text">${intensity.toFixed(1)}</span> kg CO2e/sq ft. 
-                It performs better than <span class="highlight-text">${percentBetter}%</span> of tracked buildings.
-            </div>
-        `;
-        
-        infoCard.classList.add('visible');
-    }
-
-    // --- 4. Utility Functions ---
-
-    function toSlug(text) {
-        if (!text) return '';
-        return String(text).toLowerCase().trim()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/[\s-]+/g, '-');
-    }
-
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * (Math.PI / 180);
-        const dLon = (lon2 - lon1) * (Math.PI / 180);
-        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
-    // --- 5. Map & Data Logic ---
-
     function initializeMap() {
-        // Initialize with Zoom Control disabled initially so we can add it manually to TopLeft
         map = L.map('map', { zoomControl: false }).setView([41.8781, -87.6298], 13); 
-        
-        // Add Zoom Control to Top Left
         L.control.zoom({ position: 'topleft' }).addTo(map);
 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap &copy; CARTO'
         }).addTo(map);
-        
         markersLayer = L.layerGroup().addTo(map);
-    }
-    initializeMap();
-
-    function updateUI(entry) {
-        selectedEntry = entry;
-        loadingIndicator.style.display = 'none';
-
-        if (entry.PropertyName) {
-            const slug = toSlug(entry.PropertyName);
-            buildingLink.textContent = entry.PropertyName;
-            buildingLink.href = `https://electrifychicago.net/building/${slug}`;
-            buildingLink.style.pointerEvents = 'auto';
-            buildingLink.style.opacity = '1';
-        } else {
-            buildingLink.textContent = "Unknown Building";
-            buildingLink.style.pointerEvents = 'none';
-            buildingLink.style.opacity = '0.7';
-        }
-
-        renderInfoCard(entry);
     }
 
     function populateMap(userLat, userLon) {
         markersLayer.clearLayers();
-
-        // User Location Marker
         L.circleMarker([userLat, userLon], { 
             radius: 8, color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 
         }).addTo(markersLayer).bindPopup("Your Location");
@@ -509,7 +658,6 @@
         allCsvData.forEach((entry) => {
             const lat = parseFloat(entry.Latitude);
             const lon = parseFloat(entry.Longitude);
-            
             if (isNaN(lat) || isNaN(lon)) return;
 
             const dist = calculateDistance(userLat, userLon, lat, lon);
@@ -519,14 +667,9 @@
             }
 
             const intensity = parseFloat(entry.GHGIntensity);
-            const color = getColor(intensity);
-
             const marker = L.circleMarker([lat, lon], {
-                radius: 6, 
-                weight: 1,
-                color: '#fff',
-                fillColor: color,
-                fillOpacity: 0.85
+                radius: 6, weight: 1, color: '#fff',
+                fillColor: getColor(intensity), fillOpacity: 0.85
             }).addTo(markersLayer);
 
             marker.on('click', () => {
@@ -535,58 +678,64 @@
                 marker.setStyle({ radius: 10, weight: 3, color: '#000' });
                 setTimeout(() => { marker.setStyle({ radius: 6, weight: 1, color: '#fff' }); }, 1500);
             });
-
             bounds.extend([lat, lon]);
         });
 
-        if (closestEntry) {
-            updateUI(closestEntry);
-        }
-        
+        if (closestEntry) updateUI(closestEntry);
         map.setView([userLat, userLon], 16);
     }
 
-    // --- 6. Initialization Flow ---
+    function updateUI(entry) {
+        loadingIndicator.style.display = 'none';
 
-    function loadCsvData() {
-        Papa.parse(CSV_FILE_PATH, {
-            download: true, header: true, dynamicTyping: true,
-            complete: function(results) {
-                allCsvData = results.data.filter(d => d.Latitude && !isNaN(parseFloat(d.Latitude)));
-                calculateGhgStats(allCsvData);
-                getGeolocation();
-            },
-            error: (err) => {
-                console.error("CSV Error:", err);
-                loadingIndicator.textContent = "Error loading data";
-            }
-        });
-    }
-
-    function getGeolocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => populateMap(pos.coords.latitude, pos.coords.longitude),
-                (err) => fallbackToIP()
-            );
+        if (entry.PropertyName) {
+            const slug = toSlug(entry.PropertyName);
+            buildingLink.textContent = entry.PropertyName;
+            buildingLink.href = `https://electrifychicago.net/building/${slug}`;
         } else {
-            fallbackToIP();
+            buildingLink.textContent = "Unknown Building";
         }
+        renderInfoCard(entry);
     }
 
-    function fallbackToIP() {
-        fetch(IPLOCATE_API)
-            .then(res => res.json())
-            .then(data => {
-                if(data.latitude) populateMap(data.latitude, data.longitude);
-            })
-            .catch(err => {
-                console.error("IP Geo Error", err);
-                populateMap(41.8781, -87.6298);
-            });
+    // Helpers
+    function toSlug(text) { return String(text||'').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/[\s-]+/g, '-'); }
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; const dLat = (lat2-lat1)*(Math.PI/180); const dLon = (lon2-lon1)*(Math.PI/180);
+        const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*(Math.PI/180))*Math.cos(lat2*(Math.PI/180)) * Math.sin(dLon/2)*Math.sin(dLon/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    loadCsvData();
+    // --- Boot ---
+    initializeMap();
+    initClouds(); 
+    startCameraStream();
+
+    Papa.parse(CSV_FILE_PATH, {
+        download: true, header: true, dynamicTyping: true,
+        complete: function(results) {
+            allCsvData = results.data.filter(d => d.Latitude && !isNaN(parseFloat(d.Latitude)));
+            calculateGhgStats(allCsvData);
+            
+            // Default visual intensity to average so something shows
+            if (ghgIntensityStats.boundaryB) currentBuildingIntensity = ghgIntensityStats.boundaryB;
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => { populateMap(pos.coords.latitude, pos.coords.longitude); },
+                    () => { fetch(IPLOCATE_API).then(r=>r.json()).then(d=>populateMap(d.latitude, d.longitude)); }
+                );
+            } else {
+                loadingIndicator.style.display = 'none';
+            }
+        },
+        error: () => { loadingIndicator.textContent = "Error loading data"; }
+    });
+
+    window.addEventListener('resize', () => {
+        cloudCanvas.width = window.innerWidth;
+        cloudCanvas.height = window.innerHeight;
+    });
 
     </script>
 </body>
